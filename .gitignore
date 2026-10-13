@@ -12,3 +12,5 @@ dist/
 .venv/
 venv/
 ENV/
+
+src/isodrome/_version.py
