@@ -20,6 +20,10 @@ class LoginError(Exception):
     pass
 
 
+class Unavailable(LoginError):
+    """The server has no browser sign-in (e.g. a local server)."""
+
+
 @dataclass
 class DeviceCode:
     device_code: str
@@ -66,6 +70,8 @@ def _post(url: str, body: dict, timeout: float = 15) -> dict:
 
 def start(base: str, client_name: str) -> DeviceCode:
     reply = _post(f"{base}/auth/device/code", {"client_name": client_name})
+    if reply.get("error") == "login_unavailable":
+        raise Unavailable(reply.get("error_description") or "sign-in is not configured on this server")
     if "error" in reply:
         raise LoginError(reply.get("error_description") or reply["error"])
     try:

@@ -27,13 +27,35 @@ def test_bad_key_is_one_line_with_a_hint(fake):
 def test_whoami(iso):
     result = iso("whoami")
     assert result.exit_code == 0, result.output
-    assert "a@acme.io" in result.output and "admin" in result.output
+    assert "signed in as:      a@acme.io" in result.output and "admin" in result.output
+    assert "credential:        session, expires 2100-01-01T00:00:00Z" in result.output
+
+
+def test_login_on_a_server_without_sign_in(fake):
+    http, base = FakeSignIn(unavailable=True).serve()
+    try:
+        result = CliRunner().invoke(cli, ["--endpoint", fake.endpoint, "login", "--http", base])
+    finally:
+        http.shutdown()
+    assert result.exit_code == 1
+    assert "not configured on this server" in result.output and "iso login --api-key" in result.output
+
+
+def test_keys_are_personal_unless_asked(iso, fake):
+    created = iso("key", "create", "--role", "writer", "--name", "bot")
+    assert created.exit_code == 0, created.output
+    assert "api key: iso_k0_" in created.stdout
+    assert iso("key", "create", "--role", "reader", "--organization").exit_code == 0
+    assert [k.owner for k in fake.keys] == ["a@acme.io", ""]
+    listed = iso("key", "list").stdout.splitlines()
+    assert listed[0].startswith("  k0 ") and "a@acme.io" in listed[0] and "api key" in listed[0] and "bot" in listed[0]
+    assert "(organization)" in listed[1]
 
 
 def test_login_with_key_saves_profile(iso, fake):
     result = iso("--profile", "local", "login", "--api-key", KEY, key=False)
     assert result.exit_code == 0, result.output
-    assert "Logged in as a@acme.io to acme" in result.output
+    assert "Logged in as a@acme.io to acme" in result.output and "session, expires 2100" in result.output
     config = Config.load()
     assert config.profiles["local"].api_key == KEY
     assert config.profiles["local"].endpoint == fake.endpoint
@@ -195,3 +217,14 @@ def test_login_against_a_server_without_sign_in(fake):
     finally:
         http.shutdown()
     assert result.exit_code == 1 and "not set up for sign-in" in result.output
+
+
+def test_pushing_a_file_twice_is_idempotent(iso, fake, tmp_path):
+    iso("feed", "create", "t", "--arrival-time")
+    events = tmp_path / "e.jsonl"
+    events.write_text('{"price": 1}\n{"price": 1}\n')
+    assert iso("feed", "push", "t", "-f", str(events)).output.strip() == "2 accepted"
+    assert iso("feed", "push", "t", "-f", str(events)).output.strip() == "2 accepted (2 already sent)"
+    events.write_text('{"price": 1}\n{"price": 2}\n')  # line 2 edited: a new event
+    assert iso("feed", "push", "t", "-f", str(events)).output.strip() == "2 accepted (1 already sent)"
+    assert len(fake.events[("default", "t")]) == 3

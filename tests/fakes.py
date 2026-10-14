@@ -14,6 +14,7 @@ from isodrome.v1 import isodrome_pb2 as pb
 from isodrome.v1 import isodrome_pb2_grpc as pb_grpc
 
 KEY = "iso_testkey_SECRETsecretSECRETsecret0"
+SESSION_EXPIRES_NS = 4_102_444_800 * 10**9  # 2100-01-01
 
 
 def ipc(table: pa.Table) -> bytes:
@@ -33,6 +34,7 @@ class FakeIsodrome(pb_grpc.IsodromeServicer):
         self.events: dict[tuple[str, str], list[tuple[int, dict]]] = {}
         self.seen_ids: set[str] = set()
         self.revoked: set[str] = set()
+        self.keys: list[pb.ApiKey] = []
         self.send_requests = 0
         self.last_read: pb.ReadRequest | None = None
 
@@ -56,8 +58,22 @@ class FakeIsodrome(pb_grpc.IsodromeServicer):
     def WhoAmI(self, request, context):
         self._auth(context)
         return pb.WhoAmIResponse(
-            organization="acme", default_namespace="default", role=pb.ROLE_ADMIN, key_id="testkey", email="a@acme.io"
+            organization="acme", default_namespace="default", role=pb.ROLE_ADMIN, key_id="testkey", email="a@acme.io",
+            kind=pb.CREDENTIAL_KIND_SESSION, expires_at_ns=SESSION_EXPIRES_NS,
         )
+
+    def CreateApiKey(self, request, context):
+        self._auth(context)
+        key = pb.ApiKey(
+            key_id=f"k{len(self.keys)}", role=request.role, name=request.name, kind=pb.CREDENTIAL_KIND_API_KEY,
+            owner="a@acme.io" if request.personal else "", default_namespace="default",
+        )
+        self.keys.append(key)
+        return pb.CreateApiKeyResponse(key=key, api_key=f"iso_{key.key_id}_SECRETsecretSECRETsecret")
+
+    def ListApiKeys(self, request, context):
+        self._auth(context)
+        return pb.ListApiKeysResponse(keys=self.keys)
 
     def ListNamespaces(self, request, context):
         self._auth(context)
@@ -168,7 +184,11 @@ class FakeSignIn:
     """`/auth/device/code` and `/auth/device/token`: pending for `pending_polls` polls, then
     approved with KEY (or `final_error`)."""
 
-    def __init__(self, pending_polls: int = 2, final_error: str | None = None, slow_down_once: bool = False):
+    def __init__(
+        self, pending_polls: int = 2, final_error: str | None = None, slow_down_once: bool = False,
+        unavailable: bool = False,
+    ):
+        self.unavailable = unavailable
         self.pending_polls = pending_polls
         self.final_error = final_error
         self.slow_down_once = slow_down_once
@@ -184,7 +204,10 @@ class FakeSignIn:
 
             def do_POST(self):
                 body = json.loads(self.rfile.read(int(self.headers.get("content-length", 0))) or b"{}")
-                if self.path == "/auth/device/code":
+                if fake.unavailable:
+                    self._reply(503, {"error": "login_unavailable",
+                                      "error_description": "sign-in is not configured on this server"})
+                elif self.path == "/auth/device/code":
                     fake.client_names.append(body.get("client_name", ""))
                     self._reply(200, {
                         "device_code": "dev-123", "user_code": "WDJB-MJHT",

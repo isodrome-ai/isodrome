@@ -169,21 +169,21 @@ class IsodromeServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def CreateApiKey(self, request, context):
-        """ADMIN only
+        """personal: anyone; else ADMIN
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def ListApiKeys(self, request, context):
-        """ADMIN only
+        """ADMIN: all; others: their own
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def RevokeApiKey(self, request, context):
-        """ADMIN, or any key revoking itself (logout)
+        """ADMIN: any; others: their own, or the one in use (logout)
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')

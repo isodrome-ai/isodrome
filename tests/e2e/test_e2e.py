@@ -74,6 +74,8 @@ def test_feed_end_to_end(logged_in, tmp_path):
         for i, (s, p) in enumerate([("AAPL", 100.0), ("MSFT", 300.0), ("AAPL", 101.5), ("MSFT", 299.0)])
     ) + "\n")
     assert ok("feed", "push", "trades", "--file", str(events)).output.strip() == "4 accepted"
+    # The same file again: recognised, not written twice.
+    assert ok("feed", "push", "trades", "--file", str(events)).output.strip() == "4 accepted (4 already sent)"
 
     # Rejections are loud, and the exit status says so.
     bad = iso("feed", "push", "trades", "--data", '{"symbol": "AAPL", "price": 1}')
@@ -118,7 +120,8 @@ def test_feed_end_to_end(logged_in, tmp_path):
 
 def test_logout_revokes_a_signed_in_key():
     ok("login", "--endpoint", ENDPOINT, "--api-key", KEY)
-    created = ok("key", "create", "--role", "reader", "--name", "e2e-logout").stdout
+    # The local stack's bootstrap key belongs to no one, so it makes organization keys.
+    created = ok("key", "create", "--role", "reader", "--name", "e2e-logout", "--organization").stdout
     reader_key = next(l.split()[-1] for l in created.splitlines() if l.startswith("api key:"))
     ok("--profile", "reader", "login", "--endpoint", ENDPOINT, "--api-key", reader_key)
     ok("--profile", "reader", "logout")

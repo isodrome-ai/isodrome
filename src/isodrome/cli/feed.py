@@ -318,8 +318,10 @@ def _print_feed(f: pb.Feed) -> None:
 def feed_push(ctx: Context, name, namespace, data, files, batch_size, quiet) -> None:
     """Send events to a feed.
 
-    Each event gets a fresh message id, so a retried request is never written twice. Every
-    rejected event is printed with the reason, and the exit status is 1 if any were rejected.
+    Retries never write an event twice. Events from --file get ids from the file and their
+    place in it, so pushing the same file again is answered "already sent" (within the server's
+    de-duplication window, 15 minutes by default). Every rejected event is printed with the
+    reason, and the exit status is 1 if any were rejected.
     """
     if not data and not files:
         if sys.stdin.isatty():
@@ -332,11 +334,13 @@ def feed_push(ctx: Context, name, namespace, data, files, batch_size, quiet) -> 
             for where, payload in pusher.parse_events(text, f"--data #{i}" if len(data) > 1 else "--data")
         ]
         for path in files:
-            text = sys.stdin.read() if path == "-" else Path(path).read_text()
-            items += [
-                pusher.Item(source=where, payload=payload)
-                for where, payload in pusher.parse_events(text, "stdin" if path == "-" else path)
-            ]
+            if path == "-":
+                items += [pusher.Item(source=w, payload=p) for w, p in pusher.parse_events(sys.stdin.read(), "stdin")]
+            else:
+                items += [
+                    pusher.Item(source=w, payload=p, message_id=pusher.stable_id(path, w, p))
+                    for w, p in pusher.parse_events(Path(path).read_text(), path)
+                ]
     except ValueError as e:
         raise click.ClickException(str(e)) from None
     if not items:

@@ -14,6 +14,12 @@ class Role(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     ROLE_WRITER: _ClassVar[Role]
     ROLE_READER: _ClassVar[Role]
 
+class CredentialKind(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    CREDENTIAL_KIND_UNSPECIFIED: _ClassVar[CredentialKind]
+    CREDENTIAL_KIND_API_KEY: _ClassVar[CredentialKind]
+    CREDENTIAL_KIND_SESSION: _ClassVar[CredentialKind]
+
 class TimeUnit(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
     TIME_UNIT_UNSPECIFIED: _ClassVar[TimeUnit]
@@ -78,6 +84,9 @@ ROLE_UNSPECIFIED: Role
 ROLE_ADMIN: Role
 ROLE_WRITER: Role
 ROLE_READER: Role
+CREDENTIAL_KIND_UNSPECIFIED: CredentialKind
+CREDENTIAL_KIND_API_KEY: CredentialKind
+CREDENTIAL_KIND_SESSION: CredentialKind
 TIME_UNIT_UNSPECIFIED: TimeUnit
 TIME_UNIT_SECONDS: TimeUnit
 TIME_UNIT_MILLISECONDS: TimeUnit
@@ -144,18 +153,24 @@ class WhoAmIRequest(_message.Message):
     def __init__(self) -> None: ...
 
 class WhoAmIResponse(_message.Message):
-    __slots__ = ("organization", "default_namespace", "role", "key_id", "email")
+    __slots__ = ("organization", "default_namespace", "role", "key_id", "email", "kind", "expires_at_ns", "service_account")
     ORGANIZATION_FIELD_NUMBER: _ClassVar[int]
     DEFAULT_NAMESPACE_FIELD_NUMBER: _ClassVar[int]
     ROLE_FIELD_NUMBER: _ClassVar[int]
     KEY_ID_FIELD_NUMBER: _ClassVar[int]
     EMAIL_FIELD_NUMBER: _ClassVar[int]
+    KIND_FIELD_NUMBER: _ClassVar[int]
+    EXPIRES_AT_NS_FIELD_NUMBER: _ClassVar[int]
+    SERVICE_ACCOUNT_FIELD_NUMBER: _ClassVar[int]
     organization: str
     default_namespace: str
     role: Role
     key_id: str
     email: str
-    def __init__(self, organization: _Optional[str] = ..., default_namespace: _Optional[str] = ..., role: _Optional[_Union[Role, str]] = ..., key_id: _Optional[str] = ..., email: _Optional[str] = ...) -> None: ...
+    kind: CredentialKind
+    expires_at_ns: int
+    service_account: str
+    def __init__(self, organization: _Optional[str] = ..., default_namespace: _Optional[str] = ..., role: _Optional[_Union[Role, str]] = ..., key_id: _Optional[str] = ..., email: _Optional[str] = ..., kind: _Optional[_Union[CredentialKind, str]] = ..., expires_at_ns: _Optional[int] = ..., service_account: _Optional[str] = ...) -> None: ...
 
 class Namespace(_message.Message):
     __slots__ = ("id", "organization", "name", "created_at_ns")
@@ -196,30 +211,40 @@ class DeleteNamespaceResponse(_message.Message):
     def __init__(self) -> None: ...
 
 class ApiKey(_message.Message):
-    __slots__ = ("key_id", "role", "default_namespace", "name", "created_at_ns", "revoked")
+    __slots__ = ("key_id", "role", "default_namespace", "name", "created_at_ns", "revoked", "kind", "owner", "created_by", "expires_at_ns")
     KEY_ID_FIELD_NUMBER: _ClassVar[int]
     ROLE_FIELD_NUMBER: _ClassVar[int]
     DEFAULT_NAMESPACE_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     CREATED_AT_NS_FIELD_NUMBER: _ClassVar[int]
     REVOKED_FIELD_NUMBER: _ClassVar[int]
+    KIND_FIELD_NUMBER: _ClassVar[int]
+    OWNER_FIELD_NUMBER: _ClassVar[int]
+    CREATED_BY_FIELD_NUMBER: _ClassVar[int]
+    EXPIRES_AT_NS_FIELD_NUMBER: _ClassVar[int]
     key_id: str
     role: Role
     default_namespace: str
     name: str
     created_at_ns: int
     revoked: bool
-    def __init__(self, key_id: _Optional[str] = ..., role: _Optional[_Union[Role, str]] = ..., default_namespace: _Optional[str] = ..., name: _Optional[str] = ..., created_at_ns: _Optional[int] = ..., revoked: bool = ...) -> None: ...
+    kind: CredentialKind
+    owner: str
+    created_by: str
+    expires_at_ns: int
+    def __init__(self, key_id: _Optional[str] = ..., role: _Optional[_Union[Role, str]] = ..., default_namespace: _Optional[str] = ..., name: _Optional[str] = ..., created_at_ns: _Optional[int] = ..., revoked: bool = ..., kind: _Optional[_Union[CredentialKind, str]] = ..., owner: _Optional[str] = ..., created_by: _Optional[str] = ..., expires_at_ns: _Optional[int] = ...) -> None: ...
 
 class CreateApiKeyRequest(_message.Message):
-    __slots__ = ("role", "default_namespace", "name")
+    __slots__ = ("role", "default_namespace", "name", "personal")
     ROLE_FIELD_NUMBER: _ClassVar[int]
     DEFAULT_NAMESPACE_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
+    PERSONAL_FIELD_NUMBER: _ClassVar[int]
     role: Role
     default_namespace: str
     name: str
-    def __init__(self, role: _Optional[_Union[Role, str]] = ..., default_namespace: _Optional[str] = ..., name: _Optional[str] = ...) -> None: ...
+    personal: bool
+    def __init__(self, role: _Optional[_Union[Role, str]] = ..., default_namespace: _Optional[str] = ..., name: _Optional[str] = ..., personal: bool = ...) -> None: ...
 
 class CreateApiKeyResponse(_message.Message):
     __slots__ = ("key", "api_key")

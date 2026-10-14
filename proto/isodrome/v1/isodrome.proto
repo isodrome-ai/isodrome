@@ -21,9 +21,9 @@ service Isodrome {
   rpc ListNamespaces(ListNamespacesRequest) returns (ListNamespacesResponse);
   // Only an empty namespace (no feeds) that no active key uses as its default.
   rpc DeleteNamespace(DeleteNamespaceRequest) returns (DeleteNamespaceResponse);  // ADMIN only
-  rpc CreateApiKey(CreateApiKeyRequest) returns (CreateApiKeyResponse);    // ADMIN only
-  rpc ListApiKeys(ListApiKeysRequest) returns (ListApiKeysResponse);       // ADMIN only
-  rpc RevokeApiKey(RevokeApiKeyRequest) returns (ApiKey);                  // ADMIN, or any key revoking itself (logout)
+  rpc CreateApiKey(CreateApiKeyRequest) returns (CreateApiKeyResponse);    // personal: anyone; else ADMIN
+  rpc ListApiKeys(ListApiKeysRequest) returns (ListApiKeysResponse);       // ADMIN: all; others: their own
+  rpc RevokeApiKey(RevokeApiKeyRequest) returns (ApiKey);                  // ADMIN: any; others: their own, or the one in use (logout)
 
   // Feeds
   rpc CreateFeed(CreateFeedRequest) returns (Feed);
@@ -64,13 +64,25 @@ enum Role {
   ROLE_READER = 3;
 }
 
+// A credential is an API key (long-lived) or a session (from `iso login`, expiring). One owned
+// by a person or service account acts with the owner's current role in the organization,
+// capped by its own role; one without an owner (e.g. the bootstrap key) has a fixed role.
+enum CredentialKind {
+  CREDENTIAL_KIND_UNSPECIFIED = 0;
+  CREDENTIAL_KIND_API_KEY = 1;
+  CREDENTIAL_KIND_SESSION = 2;
+}
+
 message WhoAmIRequest {}
 message WhoAmIResponse {
   string organization = 1;
   string default_namespace = 2;
   Role role = 3;
   string key_id = 4;
-  string email = 5;                  // the person the key was issued to by signing in, if any
+  string email = 5;                  // the person the credential acts for, if a person
+  CredentialKind kind = 6;
+  int64 expires_at_ns = 7;           // 0: does not expire
+  string service_account = 8;        // the service account it acts for, if one
 }
 
 message Namespace {
@@ -88,23 +100,33 @@ message DeleteNamespaceResponse {}
 // An API key as an admin sees it. The secret is shown once, when the key is created.
 message ApiKey {
   string key_id = 1;
-  Role role = 2;
+  Role role = 2;                     // owned credentials: a cap on the owner's role
   string default_namespace = 3;
   string name = 4;                   // a label for people
   int64 created_at_ns = 5;
   bool revoked = 6;
+  CredentialKind kind = 7;
+  string owner = 8;                  // the person (email) or service account it acts for; empty: fixed role
+  string created_by = 9;             // the person who created it, if a person did
+  int64 expires_at_ns = 10;          // 0: does not expire
 }
 message CreateApiKeyRequest {
-  Role role = 1;                     // required
+  Role role = 1;                     // required; for a personal key, at most your own role
   string default_namespace = 2;      // empty = the caller's default namespace
   string name = 3;
+  // A personal key: owned by you and acting as you (with at most `role`), so it follows your
+  // membership and stops working if you leave. Any member may create one. Otherwise (ADMIN
+  // only) an organization key with a fixed role.
+  bool personal = 4;
 }
 message CreateApiKeyResponse {
   ApiKey key = 1;
   string api_key = 2;                // the full key, iso_<key_id>_<secret>; not retrievable later
 }
 message ListApiKeysRequest {}
-message ListApiKeysResponse { repeated ApiKey keys = 1; }   // the caller's organization, revoked ones included
+// ADMIN: every credential of the organization; anyone else: the credentials they own. Revoked
+// ones included.
+message ListApiKeysResponse { repeated ApiKey keys = 1; }
 message RevokeApiKeyRequest { string key_id = 1; }          // takes effect immediately; idempotent
 
 // ---------- Feeds ----------
@@ -228,6 +250,8 @@ message UndeleteFeedRequest {
 }
 
 message GetFeedRequest { FeedRef feed = 1; }
+// ListFeeds returns a summary per feed: settings and `stats.rejections` counts (total, last
+// hour), without columns or flush stats; GetFeed returns everything.
 message ListFeedsRequest {
   string namespace = 1;             // empty = key's default namespace
   bool deleted = 2;                 // list deleted feeds that can still be undeleted instead

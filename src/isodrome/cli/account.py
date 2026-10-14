@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import socket
+import time
 import webbrowser
 
 import click
@@ -12,7 +13,7 @@ from isodrome import login as device_flow
 from isodrome.cli.context import Context, pass_context, warn_on_version_mismatch
 from isodrome.client import key_id
 from isodrome.config import config_path
-from isodrome.parse import short_enum
+from isodrome.parse import format_ns, short_enum
 from isodrome.v1 import isodrome_pb2 as pb
 
 
@@ -46,6 +47,8 @@ def login(
         base = (http_base or info.public_url or client.endpoint.http_base()).rstrip("/")
         try:
             code = device_flow.start(base, f"iso on {socket.gethostname()}")
+        except device_flow.Unavailable as e:
+            raise click.ClickException(f"{e}; log in with an API key instead: iso login --api-key iso_...") from None
         except device_flow.LoginError as e:
             raise click.ClickException(f"sign-in failed: {e}") from None
         click.echo(f"Your code: {click.style(code.user_code, bold=True)}", err=True)
@@ -67,12 +70,29 @@ def login(
     profile.api_key = api_key
     profile.namespace = None  # the new key's default namespace, until `iso namespace use`
     ctx.save()
-    who = me.email or f"key {me.key_id}"
     click.echo(
-        f"Logged in as {who} to {me.organization} at {client.endpoint.url} "
-        f"(namespace {me.default_namespace}, role {short_enum(pb.Role, me.role)})."
+        f"Logged in as {_identity(me)} to {me.organization} at {client.endpoint.url} "
+        f"(namespace {me.default_namespace}, role {short_enum(pb.Role, me.role)}; "
+        f"{_credential(me.kind, me.expires_at_ns)})."
     )
     click.echo(f"Saved to {config_path()} (profile {ctx.profile_name}).", err=True)
+
+
+def _identity(me: pb.WhoAmIResponse) -> str:
+    if me.email:
+        return me.email
+    if me.service_account:
+        return f"service account {me.service_account}"
+    return f"key {me.key_id} (no owner)"
+
+
+def _credential(kind: int, expires_at_ns: int) -> str:
+    name = {pb.CREDENTIAL_KIND_SESSION: "session", pb.CREDENTIAL_KIND_API_KEY: "API key"}.get(kind, "key")
+    if not expires_at_ns:
+        return f"{name}, does not expire"
+    days = (expires_at_ns - time.time_ns()) / 86_400e9
+    when = format_ns(expires_at_ns)
+    return f"{name}, expires {when}" + (f" (in {days:.0f} days)" if days >= 1 else "")
 
 
 def _whoami(ctx: Context, api_key: str) -> pb.WhoAmIResponse:
@@ -119,7 +139,8 @@ def whoami(ctx: Context) -> None:
     """Show who your API key belongs to, and its organization, namespace and role."""
     me = ctx.client().call("WhoAmI", pb.WhoAmIRequest())
     rows = [
-        ("email", me.email or "(none: not issued by signing in)"),
+        ("signed in as", _identity(me)),
+        ("credential", _credential(me.kind, me.expires_at_ns)),
         ("organization", me.organization),
         ("default namespace", me.default_namespace),
         ("namespace in use", ctx.profile.namespace or me.default_namespace),

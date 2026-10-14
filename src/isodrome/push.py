@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -54,6 +56,14 @@ def parse_events(text: str, source: str = "") -> Iterator[tuple[str, bytes]]:
     for n, line in enumerate(text.splitlines(), 1):
         if line.strip():
             yield f"{source}:{n}" if source else f"line {n}", line.strip().encode()
+
+
+def stable_id(path: str, where: str, payload: bytes) -> str:
+    """A message id derived from the file, the event's place in it and its content: pushing the
+    same file again is answered `duplicate` instead of writing every event twice (within the
+    server's de-duplication window), while an edited event gets a new id."""
+    digest = hashlib.sha256(f"{os.path.abspath(path)}\0{where}\0".encode() + payload).digest()
+    return digest[:16].hex()
 
 
 def batches(items: Iterable[Item], size: int = DEFAULT_BATCH_SIZE, max_bytes: int = MAX_BATCH_BYTES):

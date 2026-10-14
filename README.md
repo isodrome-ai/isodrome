@@ -24,7 +24,8 @@ iso feed tail weather                        # the last 10 events, then new ones
 Events are JSON objects. A feed takes each event's time from its `event_time` field (or
 `--time-field`) unless created with `--arrival-time`, and with `--key FIELD` keeps the newest
 event per key for `iso feed latest`. `iso feed push` reads `--data`, `--file` (JSON Lines, a
-JSON array, or one object) or standard input, and prints every rejected event and why.
+JSON array, or one object) or standard input, and prints every rejected event and why. Pushing
+the same file twice is recognised and not written twice (within the server's 15-minute window).
 
 ## Commands
 
@@ -33,7 +34,7 @@ JSON array, or one object) or standard input, and prints every rejected event an
 | `iso login` / `logout` | sign in with the browser (or `--api-key`); logout revokes the key |
 | `iso whoami`, `iso server`, `iso --version` | your identity; the server's version and limits |
 | `iso namespace create` / `list` / `delete` / `use` | namespaces; `use` sets the one commands act on |
-| `iso key create` / `list` / `revoke` | API keys (admin) |
+| `iso key create` / `list` / `revoke` | API keys for scripts and services (personal by default); your sessions |
 | `iso feed create` / `list` / `show` / `describe` / `update` | feeds; `describe` shows how to send and query |
 | `iso feed delete` / `undelete` / `errors` | soft deletion (7 days to undo); recent rejections |
 | `iso feed push` / `query` / `tail` / `latest` | send and read events; `-o table\|json\|csv` |

@@ -13,7 +13,7 @@ from isodrome.v1 import isodrome_pb2 as pb
 
 # Hints for errors a person can do something about.
 _HINTS = {
-    grpc.StatusCode.UNAUTHENTICATED: "your API key was refused; run `iso login`",
+    grpc.StatusCode.UNAUTHENTICATED: "your credential is missing, revoked or expired; run `iso login`",
     grpc.StatusCode.PERMISSION_DENIED: "your key's role does not allow this (see `iso whoami`)",
 }
 
