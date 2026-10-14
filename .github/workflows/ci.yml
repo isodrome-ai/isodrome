@@ -60,8 +60,19 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: python -m pip install -e '.[dev]'
-      - run: docker compose -f tests/e2e/docker-compose.yml up -d --wait --wait-timeout 300
-      - run: ISODROME_E2E_ENDPOINT=http://localhost:7470 pytest -q -m e2e tests/e2e
-      - if: failure()
+      - name: Is the server image published?
+        id: image
+        run: |
+          if docker manifest inspect "$ISODROME_SERVER_IMAGE" > /dev/null 2>&1; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::$ISODROME_SERVER_IMAGE is not published yet; skipping the end-to-end tests"
+          fi
+      - if: steps.image.outputs.available == 'true'
+        run: python -m pip install -e '.[dev]'
+      - if: steps.image.outputs.available == 'true'
+        run: docker compose -f tests/e2e/docker-compose.yml up -d --wait --wait-timeout 300
+      - if: steps.image.outputs.available == 'true'
+        run: ISODROME_E2E_ENDPOINT=http://localhost:7470 pytest -q -m e2e tests/e2e
+      - if: failure() && steps.image.outputs.available == 'true'
         run: docker compose -f tests/e2e/docker-compose.yml logs isodrome-server | tail -200
