@@ -5,13 +5,29 @@ build-backend = "hatchling.build"
 [project]
 name = "isodrome"
 dynamic = ["version"]
-description = "Python SDK for Isodrome: deterministic real-time feature infrastructure for trading."
+description = "Python SDK and CLI for Isodrome: deterministic real-time feature infrastructure for trading."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Isodrome", email = "james@isodrome.ai" }]
 classifiers = [
-  "Development Status :: 1 - Planning",
+  "Development Status :: 2 - Pre-Alpha",
   "Programming Language :: Python :: 3",
+]
+dependencies = [
+  "click>=8.1",
+  # The generated client in src/isodrome/v1 needs at least the versions it was generated with.
+  # Generated with grpcio-tools 1.75 so that protobuf 6 works: Google's own libraries still pin it below 7.
+  "grpcio>=1.75.1",
+  "protobuf>=6.31.1,<8",
+  "pyarrow>=14",
+  "tomli>=2.0; python_version < '3.11'",
+]
+
+[project.optional-dependencies]
+dev = [
+  # Pinned: scripts/sync_proto.sh --check compares the committed code with what this version generates.
+  "grpcio-tools==1.75.1",
+  "pytest>=8",
 ]
 
 [project.urls]
@@ -26,3 +42,7 @@ source = "vcs"
 
 [tool.hatch.build.hooks.vcs]
 version-file = "src/isodrome/_version.py"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["e2e: runs against a real server (set ISODROME_E2E_ENDPOINT)"]

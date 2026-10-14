@@ -1,0 +1,75 @@
+# A local Isodrome server for the end-to-end tests: the same stack as isodrome-server's
+# deploy/docker-compose.yml, from a published image instead of a source build.
+#
+#   ISODROME_SERVER_IMAGE=ghcr.io/isodrome-ai/isodrome-server:latest \
+#     docker compose -f tests/e2e/docker-compose.yml up -d --wait
+#   ISODROME_E2E_ENDPOINT=http://localhost:7470 pytest -m e2e
+
+name: isodrome-e2e
+
+services:
+  redpanda:
+    image: redpandadata/redpanda:v26.2.4
+    command:
+      - redpanda
+      - start
+      - --mode=dev-container
+      - --smp=1
+      - --memory=1G
+      - --kafka-addr=internal://0.0.0.0:9092
+      - --advertise-kafka-addr=internal://redpanda:9092
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  rustfs:
+    image: rustfs/rustfs:1.0.1
+    environment:
+      RUSTFS_ACCESS_KEY: isodrome
+      RUSTFS_SECRET_KEY: isodrome-dev-secret   # dev only
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9000/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  postgres:
+    image: postgres:16.15-trixie
+    environment:
+      POSTGRES_USER: isodrome
+      POSTGRES_PASSWORD: isodrome      # dev only
+      POSTGRES_DB: isodrome
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U isodrome -d isodrome"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  isodrome-server:
+    image: ${ISODROME_SERVER_IMAGE:-ghcr.io/isodrome-ai/isodrome-server:latest}
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      rustfs:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      ISODROME_DATABASE_URL: postgres://isodrome:isodrome@postgres:5432/isodrome
+      ISODROME_KAFKA_BROKERS: redpanda:9092
+      ISODROME_LOG_REPLICATION: "1"
+      ISODROME_S3_ENDPOINT: http://rustfs:9000
+      ISODROME_S3_BUCKET: isodrome
+      ISODROME_S3_REGION: us-east-1
+      ISODROME_S3_ACCESS_KEY_ID: isodrome
+      ISODROME_S3_SECRET_ACCESS_KEY: isodrome-dev-secret
+      ISODROME_S3_ALLOW_HTTP: "true"
+      ISODROME_FLUSH_INTERVAL: 1s
+      # DEV ONLY: the publicly known admin key of the local stack.
+      ISODROME_BOOTSTRAP_KEY: iso_devlocal_DEVONLYlocalAdminKeyNeverUseInProduction0
+    ports:
+      - "7470:7470"
+      - "7471:7471"

@@ -1,0 +1,435 @@
+// The public Isodrome API.
+//
+// This file is the contract with clients. Field numbers must never change once committed; new
+// fields get new numbers. All times are integer nanoseconds since the Unix epoch, UTC.
+//
+// Authentication: every RPC requires gRPC metadata `authorization: Bearer iso_<key_id>_<secret>`.
+// Resources that belong to another organization are reported as NOT_FOUND, never
+// PERMISSION_DENIED, so that their existence does not leak.
+
+syntax = "proto3";
+
+package isodrome.v1;
+
+service Isodrome {
+  // Server identity, version and limits. Needs no API key.
+  rpc GetServerInfo(GetServerInfoRequest) returns (ServerInfo);
+
+  // Identity & tenancy
+  rpc WhoAmI(WhoAmIRequest) returns (WhoAmIResponse);
+  rpc CreateNamespace(CreateNamespaceRequest) returns (Namespace);
+  rpc ListNamespaces(ListNamespacesRequest) returns (ListNamespacesResponse);
+  // Only an empty namespace (no feeds) that no active key uses as its default.
+  rpc DeleteNamespace(DeleteNamespaceRequest) returns (DeleteNamespaceResponse);  // ADMIN only
+  rpc CreateApiKey(CreateApiKeyRequest) returns (CreateApiKeyResponse);    // personal: anyone; else ADMIN
+  rpc ListApiKeys(ListApiKeysRequest) returns (ListApiKeysResponse);       // ADMIN: all; others: their own
+  rpc RevokeApiKey(RevokeApiKeyRequest) returns (ApiKey);                  // ADMIN: any; others: their own, or the one in use (logout)
+
+  // Feeds
+  rpc CreateFeed(CreateFeedRequest) returns (Feed);
+  rpc GetFeed(GetFeedRequest) returns (Feed);
+  rpc ListFeeds(ListFeedsRequest) returns (ListFeedsResponse);
+  rpc UpdateFeed(UpdateFeedRequest) returns (Feed);                        // WRITER or ADMIN
+  // Soft delete: hidden and closed to Sends at once, its name free for reuse; its data is
+  // purged after the grace period (Feed.purge_at_ns) unless UndeleteFeed restores it first.
+  rpc DeleteFeed(DeleteFeedRequest) returns (Feed);                        // WRITER or ADMIN
+  rpc UndeleteFeed(UndeleteFeedRequest) returns (Feed);                    // WRITER or ADMIN
+  rpc ListRejections(ListRejectionsRequest) returns (ListRejectionsResponse);
+
+  // Data
+  rpc Send(stream SendRequest) returns (stream SendResponse);
+  rpc Latest(LatestRequest) returns (LatestResponse);
+  rpc Read(ReadRequest) returns (stream ReadResponse);
+  rpc Subscribe(SubscribeRequest) returns (stream SubscribeResponse);
+}
+
+// ---------- Server ----------
+
+message GetServerInfoRequest {}
+message ServerInfo {
+  string version = 1;                // server version, e.g. "0.1.0"
+  string revision = 2;               // source revision it was built from, if known
+  string api_version = 3;            // "v1"
+  string public_url = 4;             // where clients reach this server, if configured
+  int64 max_payload_bytes = 5;       // largest accepted event
+  int64 dedupe_window_ns = 6;        // how long a message_id is remembered for retries
+}
+
+// ---------- Identity & tenancy ----------
+
+enum Role {
+  ROLE_UNSPECIFIED = 0;
+  ROLE_ADMIN = 1;
+  ROLE_WRITER = 2;
+  ROLE_READER = 3;
+}
+
+// A credential is an API key (long-lived) or a session (from `iso login`, expiring). One owned
+// by a person or service account acts with the owner's current role in the organization,
+// capped by its own role; one without an owner (e.g. the bootstrap key) has a fixed role.
+enum CredentialKind {
+  CREDENTIAL_KIND_UNSPECIFIED = 0;
+  CREDENTIAL_KIND_API_KEY = 1;
+  CREDENTIAL_KIND_SESSION = 2;
+}
+
+message WhoAmIRequest {}
+message WhoAmIResponse {
+  string organization = 1;
+  string default_namespace = 2;
+  Role role = 3;
+  string key_id = 4;
+  string email = 5;                  // the person the credential acts for, if a person
+  CredentialKind kind = 6;
+  int64 expires_at_ns = 7;           // 0: does not expire
+  string service_account = 8;        // the service account it acts for, if one
+}
+
+message Namespace {
+  string id = 1;
+  string organization = 2;
+  string name = 3;
+  int64 created_at_ns = 4;
+}
+message CreateNamespaceRequest { string name = 1; }          // ADMIN only
+message ListNamespacesRequest {}
+message ListNamespacesResponse { repeated Namespace namespaces = 1; }
+message DeleteNamespaceRequest { string name = 1; }
+message DeleteNamespaceResponse {}
+
+// An API key as an admin sees it. The secret is shown once, when the key is created.
+message ApiKey {
+  string key_id = 1;
+  Role role = 2;                     // owned credentials: a cap on the owner's role
+  string default_namespace = 3;
+  string name = 4;                   // a label for people
+  int64 created_at_ns = 5;
+  bool revoked = 6;
+  CredentialKind kind = 7;
+  string owner = 8;                  // the person (email) or service account it acts for; empty: fixed role
+  string created_by = 9;             // the person who created it, if a person did
+  int64 expires_at_ns = 10;          // 0: does not expire
+}
+message CreateApiKeyRequest {
+  Role role = 1;                     // required; for a personal key, at most your own role
+  string default_namespace = 2;      // empty = the caller's default namespace
+  string name = 3;
+  // A personal key: owned by you and acting as you (with at most `role`), so it follows your
+  // membership and stops working if you leave. Any member may create one. Otherwise (ADMIN
+  // only) an organization key with a fixed role.
+  bool personal = 4;
+}
+message CreateApiKeyResponse {
+  ApiKey key = 1;
+  string api_key = 2;                // the full key, iso_<key_id>_<secret>; not retrievable later
+}
+message ListApiKeysRequest {}
+// ADMIN: every credential of the organization; anyone else: the credentials they own. Revoked
+// ones included.
+message ListApiKeysResponse { repeated ApiKey keys = 1; }
+message RevokeApiKeyRequest { string key_id = 1; }          // takes effect immediately; idempotent
+
+// ---------- Feeds ----------
+
+// Empty namespace = the API key's default namespace.
+message FeedRef {
+  string namespace = 1;
+  string name = 2;
+}
+
+enum TimeUnit {
+  TIME_UNIT_UNSPECIFIED = 0;    // infer from the first numeric event time, then lock it in the registry
+  TIME_UNIT_SECONDS = 1;
+  TIME_UNIT_MILLISECONDS = 2;
+  TIME_UNIT_MICROSECONDS = 3;
+  TIME_UNIT_NANOSECONDS = 4;
+}
+
+enum AckMode {
+  ACK_MODE_UNSPECIFIED = 0;     // treated as REPLICATED
+  ACK_MODE_REPLICATED = 1;      // ack only after the log confirms the write (acks=all)
+  ACK_MODE_NONE = 2;            // ack on receipt; best-effort durability, never duplicated
+}
+
+enum ColumnType {
+  COLUMN_TYPE_UNSPECIFIED = 0;
+  COLUMN_TYPE_BOOL = 1;
+  COLUMN_TYPE_INT64 = 2;
+  COLUMN_TYPE_FLOAT64 = 3;
+  COLUMN_TYPE_STRING = 4;
+  COLUMN_TYPE_JSON = 5;         // arrays and anything else, stored as JSON text
+}
+
+message Column {
+  string name = 1;              // dotted path for nested fields, e.g. "pitch.velocity"
+  ColumnType type = 2;
+  int64 first_seen_ns = 3;      // receive time of the first event that contained it
+}
+
+message FeedStats {
+  int64 events_flushed = 1;
+  int64 events_pending_flush = 2;
+  int64 flush_lag_ms = 3;
+  int64 file_count = 4;
+  int64 schema_conflicts = 5;
+  RejectionStats rejections = 6;
+}
+
+// Events refused at Send (each is also answered in its SendResponse and kept in the feed's
+// dead-letter log, retained like the feed's own log). So that a misconfigured feed is noticed at
+// once rather than discovered later.
+message RejectionStats {
+  int64 total = 1;                   // still retained
+  int64 last_hour = 2;
+  // Last hour, by reason, counted over at most the most recent 5,000 rejections.
+  map<string, int64> last_hour_by_reason = 3;
+  Rejected latest = 4;               // absent if there are none
+}
+
+message Rejected {
+  string message_id = 1;
+  RejectionReason reason = 2;
+  string detail = 3;
+  int64 rejected_at_ns = 4;
+  bytes payload = 5;                 // the original event (truncated to 64 KiB if it was larger)
+  int64 original_payload_bytes = 6;
+}
+
+message ListRejectionsRequest {
+  FeedRef feed = 1;
+  uint32 limit = 2;                  // most recent first; default 20, at most 1,000
+}
+message ListRejectionsResponse { repeated Rejected rejections = 1; }
+
+message CreateFeedRequest {
+  FeedRef feed = 1;
+  optional string key_field = 2;    // dotted path; absent = one ordered stream (1 partition)
+  string time_field = 3;            // dotted path; empty = "event_time" (unless arrival_time)
+  TimeUnit time_unit = 4;
+  AckMode ack_mode = 5;
+  optional int32 partitions = 6;    // default from config; forced to 1 when key_field is absent
+  // No time field: an event's time is when the server received it (time_field must be empty).
+  bool arrival_time = 7;
+}
+
+// Changes a feed's settings. Only the fields set change; each applies to events received from
+// then on (stored events keep their times and keys).
+message UpdateFeedRequest {
+  FeedRef feed = 1;
+  optional string time_field = 2;   // a dotted path; clears arrival_time
+  optional bool arrival_time = 3;   // true: no time field from now on (event time = arrival)
+  TimeUnit time_unit = 4;           // UNSPECIFIED = unchanged
+  AckMode ack_mode = 5;             // UNSPECIFIED = unchanged
+  // Only while the feed has no events (FAILED_PRECONDITION otherwise): data already stored is
+  // partitioned and indexed by the old key. "" = unkeyed (only for a one-partition feed).
+  optional string key_field = 6;
+}
+
+message Feed {
+  string id = 1;
+  string organization = 2;
+  string namespace = 3;
+  string name = 4;
+  optional string key_field = 5;
+  string time_field = 6;
+  TimeUnit time_unit = 7;
+  AckMode ack_mode = 8;
+  int32 partitions = 9;
+  int64 created_at_ns = 10;
+  repeated Column columns = 11;
+  FeedStats stats = 12;
+  bool arrival_time = 13;           // no time field: event time = when the server received it
+  int64 deleted_at_ns = 14;         // 0 unless deleted
+  int64 purge_at_ns = 15;           // deleted feeds: when their data is removed for good
+}
+
+message DeleteFeedRequest { FeedRef feed = 1; }
+message UndeleteFeedRequest {
+  FeedRef feed = 1;                 // namespace and name of the deleted feed
+  string id = 2;                    // needed only if several deleted feeds had that name
+}
+
+message GetFeedRequest { FeedRef feed = 1; }
+// ListFeeds returns a summary per feed: settings and `stats.rejections` counts (total, last
+// hour), without columns or flush stats; GetFeed returns everything.
+message ListFeedsRequest {
+  string namespace = 1;             // empty = key's default namespace
+  bool deleted = 2;                 // list deleted feeds that can still be undeleted instead
+}
+message ListFeedsResponse { repeated Feed feeds = 1; }
+
+// ---------- Send ----------
+
+message Event {
+  bytes payload = 1;                 // UTF-8 JSON object
+  optional int64 event_time_ns = 2;  // if set, overrides time_field
+  string message_id = 3;             // required; client-generated; unique per feed; makes retries idempotent
+}
+
+message SendRequest {
+  FeedRef feed = 1;
+  repeated Event events = 2;
+}
+
+message Accepted {
+  string message_id = 1;
+  int64 receive_time_ns = 2;
+  int32 partition = 3;               // -1 under ACK_MODE_NONE
+  int64 offset = 4;                  // -1 under ACK_MODE_NONE
+  bool duplicate = 5;                // message_id already accepted; nothing new written
+}
+
+enum RejectionReason {
+  REJECTION_REASON_UNSPECIFIED = 0;
+  REJECTION_REASON_INVALID_JSON = 1;
+  REJECTION_REASON_NOT_AN_OBJECT = 2;
+  REJECTION_REASON_MISSING_EVENT_TIME = 3;
+  REJECTION_REASON_INVALID_EVENT_TIME = 4;
+  REJECTION_REASON_MISSING_KEY = 5;
+  REJECTION_REASON_INVALID_KEY = 6;
+  REJECTION_REASON_PAYLOAD_TOO_LARGE = 7;
+  REJECTION_REASON_MISSING_MESSAGE_ID = 8;
+  // The message_id was already accepted for a *different* payload within the dedupe window:
+  // a reused id rather than a retry. Nothing is written. (Added after v0's initial contract;
+  // a retry with the same payload is still answered Accepted{duplicate: true}.)
+  REJECTION_REASON_MESSAGE_ID_REUSED = 9;
+}
+
+message Rejection {
+  string message_id = 1;
+  RejectionReason reason = 2;
+  string detail = 3;
+}
+
+message SendResponse {
+  repeated Accepted accepted = 1;
+  repeated Rejection rejected = 2;
+  // Time the server spent on this request, from receiving it to the response being ready.
+  // A client's own measurement minus this is the network (and any proxy) in between.
+  int64 server_ns = 3;
+}
+
+// ---------- Queries ----------
+
+enum FilterOp {
+  FILTER_OP_UNSPECIFIED = 0;
+  FILTER_OP_EQ = 1;
+  FILTER_OP_NE = 2;
+  FILTER_OP_LT = 3;
+  FILTER_OP_LTE = 4;
+  FILTER_OP_GT = 5;
+  FILTER_OP_GTE = 6;
+  FILTER_OP_IN = 7;
+  FILTER_OP_IS_NULL = 8;
+  FILTER_OP_IS_NOT_NULL = 9;
+}
+
+message Value {
+  oneof kind {
+    bool bool_value = 1;
+    int64 int_value = 2;
+    double float_value = 3;
+    string string_value = 4;
+  }
+}
+
+// Structured filters only; no raw SQL in v0.
+message Filter {
+  string column = 1;                 // inferred column (dotted path) or _event_time, _receive_time, _key
+  FilterOp op = 2;
+  repeated Value values = 3;         // exactly one, except IN (one or more) and IS_[NOT_]NULL (none)
+}
+
+// A self-contained Arrow IPC *stream* (schema + one or more record batches).
+message ArrowBatch { bytes ipc = 1; }
+
+message LatestRequest {
+  FeedRef feed = 1;
+  repeated string keys = 2;          // empty = every key
+  repeated string columns = 3;       // empty = all
+}
+message LatestResponse {
+  ArrowBatch batch = 1;
+  int64 server_ns = 2;                      // time the server spent on this request
+}
+
+message ReadRequest {
+  FeedRef feed = 1;
+  optional int64 start_event_time_ns = 2;   // inclusive
+  optional int64 end_event_time_ns = 3;     // exclusive
+  optional int64 as_of_ns = 4;              // only events with _receive_time <= as_of_ns
+  repeated Filter filters = 5;
+  repeated string columns = 6;              // empty = all inferred + system columns
+  optional uint64 limit = 7;
+  bool include_payload = 8;                 // include _payload (original JSON)
+  // Only events below this position (in addition to every other condition). Pass the position
+  // a previous Read returned to read exactly the same events again, whatever has arrived or
+  // been flushed since. Must name every partition and not be past the end of the log. The
+  // columns are the feed's current ones: columns first seen later read as NULL, and int columns
+  // widened since read as float.
+  optional Position at_position = 9;
+  // Keep one event per distinct value of these columns, before `filters` are applied.
+  optional Dedupe dedupe = 10;
+}
+message ReadResponse {
+  ArrowBatch batch = 1;
+  Position position = 2;                    // set on the first message: where this result ends
+  int64 server_ns = 3;                      // on the first message: time from request to the plan being ready
+}
+
+// A point in a feed's log: for each partition, by index, the first offset NOT included.
+// Unlike a receive time, it identifies one exact set of events, so a query can be repeated
+// exactly; Accepted's partition and offset are positions in the same coordinates.
+message Position { repeated int64 next_offsets = 1; }
+
+enum DedupeKeep {
+  DEDUPE_KEEP_UNSPECIFIED = 0;  // treated as LAST
+  DEDUPE_KEEP_FIRST = 1;        // the earliest received event per value
+  DEDUPE_KEEP_LAST = 2;         // the latest received event per value (e.g. corrections win)
+}
+
+// Query-time de-duplication: of the events with equal values in `columns` (NULLs equal each
+// other), keep one, chosen by arrival order (_receive_time, _partition, _offset). Applied
+// within the event-time range and as-of, before filters, so a filter never resurrects a
+// superseded version. Independent of Send's message-id de-duplication, which always applies.
+message Dedupe {
+  repeated string columns = 1;  // e.g. ["_key"] or ["trade_id"]; at least one
+  DedupeKeep keep = 2;
+}
+
+enum Delivery {
+  DELIVERY_UNSPECIFIED = 0;    // treated as CONFIRMED
+  DELIVERY_CONFIRMED = 1;      // only durably written events
+  DELIVERY_FAST = 2;           // pre-durability fan-out with retractions — return UNIMPLEMENTED in v0
+}
+
+message SubscribeRequest {
+  FeedRef feed = 1;
+  oneof start {
+    bool from_beginning = 2;
+    int64 from_event_time_ns = 3;
+    bool from_now = 4;
+    uint64 from_last = 11;           // the last N events (by event time), then live: "tail"
+  }
+  optional double speed = 5;         // history pacing by event time (1.0 = real time); unset = as fast as possible
+  repeated Filter filters = 6;
+  repeated string columns = 7;
+  Delivery delivery = 8;
+  bool include_payload = 9;
+  // De-duplicates the history only (as Read's `dedupe`); live events are never held back.
+  optional Dedupe dedupe = 10;
+}
+
+message CaughtUp {
+  int64 history_events = 1;
+  Position position = 2;             // where history ends and live begins
+}
+message Heartbeat { int64 server_time_ns = 1; }
+
+message SubscribeResponse {
+  oneof message {
+    ArrowBatch batch = 1;
+    CaughtUp caught_up = 2;          // sent exactly once: history done, live from here
+    Heartbeat heartbeat = 3;
+  }
+}

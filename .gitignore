@@ -14,3 +14,5 @@ venv/
 ENV/
 
 src/isodrome/_version.py
+
+.idea/
