@@ -1,0 +1,67 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: python -m pip install -e '.[dev]'
+      - run: pytest -q
+
+  # The generated client must match the vendored proto. Comparing the proto with the server's own
+  # copy needs read access to the private isodrome-server repository, through the
+  # SERVER_REPO_TOKEN secret (a fine-grained token with read access to its contents); without
+  # it, only the generated code is checked against the vendored proto.
+  proto:
+    runs-on: ubuntu-latest
+    env:
+      SERVER_REPO_TOKEN: ${{ secrets.SERVER_REPO_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install 'grpcio-tools==1.84.0'
+      - name: Check out isodrome-server
+        if: ${{ env.SERVER_REPO_TOKEN != '' }}
+        uses: actions/checkout@v4
+        with:
+          repository: isodrome-ai/isodrome-server
+          token: ${{ secrets.SERVER_REPO_TOKEN }}
+          path: isodrome-server
+          sparse-checkout: proto
+      - name: Fall back to the vendored proto
+        if: ${{ hashFiles('isodrome-server/proto/isodrome/v1/isodrome.proto') == '' }}
+        run: mkdir -p isodrome-server/proto && cp -r proto/isodrome isodrome-server/proto/
+      - run: ISODROME_SERVER=isodrome-server scripts/sync_proto.sh --check
+
+  # The CLI against a real server, from the published image.
+  e2e:
+    runs-on: ubuntu-latest
+    env:
+      ISODROME_SERVER_IMAGE: ghcr.io/isodrome-ai/isodrome-server:latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -e '.[dev]'
+      - run: docker compose -f tests/e2e/docker-compose.yml up -d --wait --wait-timeout 300
+      - run: ISODROME_E2E_ENDPOINT=http://localhost:7470 pytest -q -m e2e tests/e2e
+      - if: failure()
+        run: docker compose -f tests/e2e/docker-compose.yml logs isodrome-server | tail -200
