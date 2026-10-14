@@ -64,6 +64,7 @@ class FakeIsodrome(pb_grpc.IsodromeServicer):
 
     def CreateApiKey(self, request, context):
         self._auth(context)
+        self.last_key_request = request
         key = pb.ApiKey(
             key_id=f"k{len(self.keys)}", role=request.role, name=request.name, kind=pb.CREDENTIAL_KIND_API_KEY,
             owner="a@acme.io" if request.personal else "", default_namespace="default",

@@ -77,7 +77,9 @@ def key() -> None:
 @key.command("create")
 @click.option("--role", type=click.Choice(list(ROLES)), required=True, help="For a personal key: at most yours.")
 @click.option("--name", default="", help='A label, e.g. "laptop" or "ingest-bot".')
-@click.option("-n", "--namespace", default="", help="Namespace used when a request names none (default: yours).")
+@click.option(
+    "-n", "--namespace", default=None, help="Namespace the key uses when a request names none (default: the one in use)."
+)
 @click.option(
     "--organization", "organization_key", is_flag=True,
     help="An organization key with a fixed role, owned by no one (admins only).",
@@ -92,7 +94,7 @@ def key_create(ctx: Context, role: str, name: str, namespace: str, organization_
     created = ctx.client().call(
         "CreateApiKey",
         pb.CreateApiKeyRequest(
-            role=ROLES[role], default_namespace=namespace, name=name, personal=not organization_key
+            role=ROLES[role], default_namespace=ctx.namespace(namespace), name=name, personal=not organization_key
         ),
     )
     _print_key(created.key)

@@ -61,6 +61,18 @@ def _value(parse, text: str, what: str):
         raise click.BadParameter(str(e), param_hint=what) from None
 
 
+# Bookkeeping a person rarely needs in a table: positions, ids and (for most feeds) arrival.
+_INTERNAL = ("_partition", "_offset", "_message_id", "_receive_time")
+
+
+def _readable(table):
+    """A table without internal columns, and without `_key` when the feed has no key."""
+    drop = [c for c in _INTERNAL if c in table.column_names]
+    if "_key" in table.column_names and table.column("_key").null_count == table.num_rows:
+        drop.append("_key")
+    return table.drop_columns(drop)
+
+
 def _filters(filters) -> list[pb.Filter]:
     return [_value(parse_filter, f, "--where") for f in filters]
 
@@ -81,27 +93,32 @@ def feed() -> None:
 @click.argument("name")
 @namespace_option
 @click.option("--key", "key_field", help="Field that keys the events (dotted path), e.g. symbol. Omit for one stream.")
-@click.option("--time-field", default="", help="Field holding each event's time (default: event_time).")
-@click.option("--arrival-time", is_flag=True, help="Events carry no time: use when the server receives them.")
+@click.option(
+    "--time-field", help="Field holding each event's own time, e.g. event_time. Default: the time it arrives."
+)
 @click.option("--time-unit", type=click.Choice(list(TIME_UNITS)), help="Unit of integer event times (recommended).")
+@click.option("--arrival-time", is_flag=True, hidden=True)  # the default; accepted for explicitness
 @click.option("--ack", type=click.Choice(list(ACK_MODES)), default="replicated", show_default=True)
 @click.option("--partitions", type=int, help="Partitions of a keyed feed (default: the server's).")
 @pass_context
 def feed_create(
-    ctx: Context, name, namespace, key_field, time_field, arrival_time, time_unit, ack, partitions
+    ctx: Context, name, namespace, key_field, time_field, time_unit, arrival_time, ack, partitions
 ) -> None:
     """Create feed NAME.
 
-    Each event is a JSON object. Its time comes from the `event_time` field (or --time-field),
-    unless --arrival-time; events without one are rejected. With --key, `iso feed latest`
-    gives the newest event per key.
+    Each event is a JSON object. By default its time is when it arrives; with --time-field it
+    is the event's own time from that field, and events without it are rejected (late events
+    then sort into place, and queries by time and as-of mean what happened when). With --key,
+    `iso feed latest` gives the newest event per key.
     """
+    if time_unit and not time_field:
+        time_field = "event_time"  # a unit only makes sense for times carried in the events
     if arrival_time and time_field:
         raise click.UsageError("--arrival-time and --time-field are exclusive")
     request = pb.CreateFeedRequest(
         feed=ctx.feed_ref(name, namespace),
-        time_field=time_field,
-        arrival_time=arrival_time,
+        time_field=time_field or "",
+        arrival_time=not time_field,
         time_unit=TIME_UNITS.get(time_unit, pb.TIME_UNIT_UNSPECIFIED),
         ack_mode=ACK_MODES[ack],
     )
@@ -111,10 +128,10 @@ def feed_create(
         request.partitions = partitions
     f = ctx.client().call("CreateFeed", request)
     click.echo(f"Created feed {f.namespace}/{f.name}.")
-    if not f.arrival_time:
-        click.echo(
-            f"Events need the field `{f.time_field}`; create with --arrival-time if they carry no time.", err=True
-        )
+    if f.arrival_time:
+        click.echo("Events are timed when they arrive (--time-field to use a time in the events).", err=True)
+    else:
+        click.echo(f"Events need the field `{f.time_field}`; events without it are rejected.", err=True)
 
 
 @feed.command("list")
@@ -158,11 +175,7 @@ def feed_describe(ctx: Context, name, namespace) -> None:
     f = client.call("GetFeed", pb.GetFeedRequest(feed=ctx.feed_ref(name, namespace)))
     info = client.server_info()
     _print_feed(f)
-    example = {"price": 101.25}
-    if f.HasField("key_field") and f.key_field:
-        example = {f.key_field: "AAPL", **example}
-    if not f.arrival_time:
-        example[f.time_field] = "2026-10-14T16:00:00Z"
+    example = _example_event(f)
 
     ns = f" -n {f.namespace}" if namespace else ""
     click.echo()
@@ -255,6 +268,40 @@ def feed_errors(ctx: Context, name, namespace, limit) -> None:
         if r.original_payload_bytes > len(r.payload):
             payload += f"… ({r.original_payload_bytes} bytes)"
         click.echo(f"    {payload}")
+
+
+_SAMPLES = {
+    pb.COLUMN_TYPE_BOOL: True,
+    pb.COLUMN_TYPE_INT64: 1,
+    pb.COLUMN_TYPE_FLOAT64: 1.5,
+    pb.COLUMN_TYPE_STRING: "text",
+    pb.COLUMN_TYPE_JSON: [],
+}
+
+
+def _example_event(f: pb.Feed) -> dict:
+    """An event shaped like the feed's: its inferred columns (nested back from dotted names),
+    plus the key and time fields it needs. Before any are inferred, a placeholder."""
+    example: dict = {}
+
+    def put(path: str, value) -> None:
+        *parents, leaf = path.split(".")
+        node = example
+        for part in parents:
+            node = node.setdefault(part, {})
+            if not isinstance(node, dict):
+                return
+        node.setdefault(leaf, value)
+
+    for column in f.columns:
+        put(column.name, _SAMPLES.get(column.type, "text"))
+    if not example:
+        put("value", 1.5)
+    if f.HasField("key_field") and f.key_field:
+        put(f.key_field, "key-1")
+    if not f.arrival_time:
+        put(f.time_field, "2026-10-14T16:00:00Z")
+    return example
 
 
 def _indent(detail: str) -> str:
@@ -379,12 +426,13 @@ def feed_push(ctx: Context, name, namespace, data, files, batch_size, quiet) -> 
 @click.option("--payload", is_flag=True, help="Include the original JSON event (_payload).")
 @click.option("--count", is_flag=True, help="Print only the number of matching events.")
 @click.option("--at-position", help="Repeat an earlier query exactly: the position it printed.")
+@click.option("--system", is_flag=True, help="In a table, also show _partition, _offset, _message_id, _receive_time.")
 @_apply(dedupe_options)
 @format_option
 @pass_context
 def feed_query(
     ctx: Context, name, namespace, since, start, end, as_of, filters, columns, limit, payload, count,
-    at_position, dedupe, keep, fmt,
+    at_position, system, dedupe, keep, fmt,
 ) -> None:
     """Read a feed's events by event time, filters and as-of."""
     if since and start:
@@ -425,6 +473,8 @@ def feed_query(
             if limit:
                 table = table.slice(0, max(limit - shown, 0))
             shown += table.num_rows
+            if fmt == "table" and not columns and not system:
+                table = _readable(table)
             printer.table(table)
     if count:
         click.echo(rows)

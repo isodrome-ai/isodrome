@@ -117,14 +117,14 @@ def test_namespace_use(iso, fake):
     assert iso("namespace", "use", "research").exit_code == 0
     assert Config.load().profile().namespace == "research"
     assert "* research" in iso("namespace", "list").output
-    iso("feed", "create", "quotes", "--arrival-time")
+    iso("feed", "create", "quotes")
     assert ("research", "quotes") in fake.feeds
     assert iso("namespace", "use", "--default").exit_code == 0
     assert Config.load().profile().namespace is None
 
 
 def test_feed_lifecycle(iso, fake, tmp_path):
-    result = iso("feed", "create", "trades", "--key", "symbol")
+    result = iso("feed", "create", "trades", "--key", "symbol", "--time-field", "event_time")
     assert result.exit_code == 0 and "Created feed default/trades" in result.output
     assert "Events need the field `event_time`" in result.output
     assert "default/trades" in iso("feed", "list").output
@@ -171,7 +171,7 @@ def test_feed_not_found(iso):
 
 
 def test_bad_arguments(iso):
-    iso("feed", "create", "t", "--arrival-time")
+    iso("feed", "create", "t")
     assert iso("feed", "query", "t", "--since", "soon").exit_code == 2
     assert iso("feed", "query", "t", "--where", "bogus").exit_code == 2
     assert iso("feed", "create", "u", "--arrival-time", "--time-field", "ts").exit_code == 2
@@ -220,7 +220,7 @@ def test_login_against_a_server_without_sign_in(fake):
 
 
 def test_pushing_a_file_twice_is_idempotent(iso, fake, tmp_path):
-    iso("feed", "create", "t", "--arrival-time")
+    iso("feed", "create", "t")
     events = tmp_path / "e.jsonl"
     events.write_text('{"price": 1}\n{"price": 1}\n')
     assert iso("feed", "push", "t", "-f", str(events)).output.strip() == "2 accepted"
@@ -228,3 +228,53 @@ def test_pushing_a_file_twice_is_idempotent(iso, fake, tmp_path):
     events.write_text('{"price": 1}\n{"price": 2}\n')  # line 2 edited: a new event
     assert iso("feed", "push", "t", "-f", str(events)).output.strip() == "2 accepted (1 already sent)"
     assert len(fake.events[("default", "t")]) == 3
+
+
+def test_feeds_are_timed_on_arrival_unless_told(iso, fake):
+    assert "timed when they arrive" in iso("feed", "create", "a").output
+    assert iso("feed", "create", "b", "--time-field", "ts").exit_code == 0
+    assert iso("feed", "create", "c", "--time-unit", "ms").exit_code == 0  # a unit implies event_time
+    feeds = {name: (f.arrival_time, f.time_field) for (_, name), f in fake.feeds.items()}
+    assert feeds == {"a": (True, ""), "b": (False, "ts"), "c": (False, "event_time")}
+
+
+def test_describe_example_follows_the_feed(iso, fake):
+    from isodrome.v1 import isodrome_pb2 as pb
+
+    iso("feed", "create", "weather", "--key", "city")
+    shown = iso("feed", "describe", "weather").output
+    assert """--data '{"value": 1.5, "city": "key-1"}'""" in shown
+    fake.feeds[("default", "weather")].columns.extend([
+        pb.Column(name="temperature", type=pb.COLUMN_TYPE_FLOAT64),
+        pb.Column(name="city", type=pb.COLUMN_TYPE_STRING),
+        pb.Column(name="wind.speed", type=pb.COLUMN_TYPE_INT64),
+    ])
+    shown = iso("feed", "describe", "weather").output
+    assert """--data '{"temperature": 1.5, "city": "text", "wind": {"speed": 1}}'""" in shown
+
+
+def test_keys_default_to_the_namespace_in_use(iso, fake):
+    iso("namespace", "create", "research")
+    iso("namespace", "use", "research")
+    iso("key", "create", "--role", "writer")
+    assert fake.last_key_request.default_namespace == "research"
+
+
+def test_query_tables_hide_internals(iso, fake):
+    import pyarrow as pa
+
+    iso("feed", "create", "t")
+    iso("feed", "push", "t", "--data", '{"price": 1}')
+    original = fake._table
+
+    def with_internals(key, columns=()):
+        table = original(key, columns)
+        if columns:
+            return table
+        return table.append_column("_partition", pa.array([0] * table.num_rows, pa.int32()))
+
+    fake._table = with_internals
+    header = iso("feed", "query", "t").stdout.splitlines()[0].split()
+    assert header == ["_event_time", "price", "_payload"]  # no _partition; _key all empty
+    assert "_partition" in iso("feed", "query", "t", "--system").stdout.splitlines()[0]
+    assert "_partition" in iso("feed", "query", "t", "-o", "json").stdout

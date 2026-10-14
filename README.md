@@ -15,15 +15,15 @@ pipx install isodrome        # or: uv tool install isodrome, or pip install isod
 
 ```bash
 iso login                                    # signs in with your browser and saves a key
-iso feed create weather --arrival-time       # events without a timestamp get their arrival time
+iso feed create weather                      # events are timed when they arrive
 iso feed push weather --data '{"temperature": 18.5, "city": "Dublin"}'
 iso feed query weather --since 1h
 iso feed tail weather                        # the last 10 events, then new ones live
 ```
 
-Events are JSON objects. A feed takes each event's time from its `event_time` field (or
-`--time-field`) unless created with `--arrival-time`, and with `--key FIELD` keeps the newest
-event per key for `iso feed latest`. `iso feed push` reads `--data`, `--file` (JSON Lines, a
+Events are JSON objects. A feed times each event when it arrives, unless created with
+`--time-field FIELD` to use a time carried in the events (needed for late data and meaningful
+as-of queries), and with `--key FIELD` keeps the newest event per key for `iso feed latest`. `iso feed push` reads `--data`, `--file` (JSON Lines, a
 JSON array, or one object) or standard input, and prints every rejected event and why. Pushing
 the same file twice is recognised and not written twice (within the server's 15-minute window).
 

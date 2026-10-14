@@ -100,8 +100,8 @@ def test_feed_end_to_end(logged_in, tmp_path):
     tail = ok("feed", "tail", "trades", "--last", "2", "--no-follow", "-o", "json").stdout.splitlines()
     assert [json.loads(l)["_payload"]["price"] for l in tail] == [101.5, 299.0]
 
-    # Arrival-time feeds take events with no timestamp.
-    ok("feed", "create", "weather", "--arrival-time")
+    # By default a feed times events on arrival, so events need no timestamp.
+    ok("feed", "create", "weather")
     ok("feed", "push", "weather", "--data", '{"temperature": 18.5, "city": "Dublin"}')
 
     def counted():
