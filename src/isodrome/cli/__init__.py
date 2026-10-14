@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
-import click
-import grpc
+import os
+
+# The CLI never uses gRPC across a fork, but opening a browser forks, and gRPC's fork handlers
+# then log noise. Read when grpc is imported, so set first.
+os.environ.setdefault("GRPC_ENABLE_FORK_SUPPORT", "false")
+
+import click  # noqa: E402
+import grpc  # noqa: E402
 
 from isodrome import __version__
 from isodrome.cli.account import account_commands

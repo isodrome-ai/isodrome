@@ -249,12 +249,17 @@ def feed_errors(ctx: Context, name, namespace, limit) -> None:
     for r in rejections:
         click.echo(
             f"{format_ns(r.rejected_at_ns)}  {click.style(short_enum(pb.RejectionReason, r.reason), fg='red'):<24} "
-            f"{r.message_id}  {r.detail}"
+            f"{r.message_id}  {_indent(r.detail)}"
         )
         payload = r.payload.decode("utf-8", "replace")
         if r.original_payload_bytes > len(r.payload):
             payload += f"… ({r.original_payload_bytes} bytes)"
         click.echo(f"    {payload}")
+
+
+def _indent(detail: str) -> str:
+    """The server's details can span lines (e.g. a JSON error with a caret); keep them under their event."""
+    return "\n    ".join(line.expandtabs(4) for line in detail.strip().splitlines() if line.strip())
 
 
 def _print_feed(f: pb.Feed) -> None:
@@ -340,7 +345,7 @@ def feed_push(ctx: Context, name, namespace, data, files, batch_size, quiet) -> 
     result = pusher.send(ctx.client(), ctx.feed_ref(name, namespace), items, batch_size=max(batch_size, 1))
     for item, rejection in result.rejected:
         click.secho(
-            f"REJECTED {item.source}: {short_enum(pb.RejectionReason, rejection.reason)}: {rejection.detail}",
+            f"REJECTED {item.source}: {short_enum(pb.RejectionReason, rejection.reason)}: {_indent(rejection.detail)}",
             fg="red", bold=True, err=True,
         )
         if item.payload:
