@@ -209,7 +209,7 @@ class ApiKey(_message.Message):
     name: str
     created_at_ns: int
     revoked: bool
-    def __init__(self, key_id: _Optional[str] = ..., role: _Optional[_Union[Role, str]] = ..., default_namespace: _Optional[str] = ..., name: _Optional[str] = ..., created_at_ns: _Optional[int] = ..., revoked: _Optional[bool] = ...) -> None: ...
+    def __init__(self, key_id: _Optional[str] = ..., role: _Optional[_Union[Role, str]] = ..., default_namespace: _Optional[str] = ..., name: _Optional[str] = ..., created_at_ns: _Optional[int] = ..., revoked: bool = ...) -> None: ...
 
 class CreateApiKeyRequest(_message.Message):
     __slots__ = ("role", "default_namespace", "name")
@@ -344,7 +344,7 @@ class CreateFeedRequest(_message.Message):
     ack_mode: AckMode
     partitions: int
     arrival_time: bool
-    def __init__(self, feed: _Optional[_Union[FeedRef, _Mapping]] = ..., key_field: _Optional[str] = ..., time_field: _Optional[str] = ..., time_unit: _Optional[_Union[TimeUnit, str]] = ..., ack_mode: _Optional[_Union[AckMode, str]] = ..., partitions: _Optional[int] = ..., arrival_time: _Optional[bool] = ...) -> None: ...
+    def __init__(self, feed: _Optional[_Union[FeedRef, _Mapping]] = ..., key_field: _Optional[str] = ..., time_field: _Optional[str] = ..., time_unit: _Optional[_Union[TimeUnit, str]] = ..., ack_mode: _Optional[_Union[AckMode, str]] = ..., partitions: _Optional[int] = ..., arrival_time: bool = ...) -> None: ...
 
 class UpdateFeedRequest(_message.Message):
     __slots__ = ("feed", "time_field", "arrival_time", "time_unit", "ack_mode", "key_field")
@@ -360,7 +360,7 @@ class UpdateFeedRequest(_message.Message):
     time_unit: TimeUnit
     ack_mode: AckMode
     key_field: str
-    def __init__(self, feed: _Optional[_Union[FeedRef, _Mapping]] = ..., time_field: _Optional[str] = ..., arrival_time: _Optional[bool] = ..., time_unit: _Optional[_Union[TimeUnit, str]] = ..., ack_mode: _Optional[_Union[AckMode, str]] = ..., key_field: _Optional[str] = ...) -> None: ...
+    def __init__(self, feed: _Optional[_Union[FeedRef, _Mapping]] = ..., time_field: _Optional[str] = ..., arrival_time: bool = ..., time_unit: _Optional[_Union[TimeUnit, str]] = ..., ack_mode: _Optional[_Union[AckMode, str]] = ..., key_field: _Optional[str] = ...) -> None: ...
 
 class Feed(_message.Message):
     __slots__ = ("id", "organization", "namespace", "name", "key_field", "time_field", "time_unit", "ack_mode", "partitions", "created_at_ns", "columns", "stats", "arrival_time", "deleted_at_ns", "purge_at_ns")
@@ -394,7 +394,7 @@ class Feed(_message.Message):
     arrival_time: bool
     deleted_at_ns: int
     purge_at_ns: int
-    def __init__(self, id: _Optional[str] = ..., organization: _Optional[str] = ..., namespace: _Optional[str] = ..., name: _Optional[str] = ..., key_field: _Optional[str] = ..., time_field: _Optional[str] = ..., time_unit: _Optional[_Union[TimeUnit, str]] = ..., ack_mode: _Optional[_Union[AckMode, str]] = ..., partitions: _Optional[int] = ..., created_at_ns: _Optional[int] = ..., columns: _Optional[_Iterable[_Union[Column, _Mapping]]] = ..., stats: _Optional[_Union[FeedStats, _Mapping]] = ..., arrival_time: _Optional[bool] = ..., deleted_at_ns: _Optional[int] = ..., purge_at_ns: _Optional[int] = ...) -> None: ...
+    def __init__(self, id: _Optional[str] = ..., organization: _Optional[str] = ..., namespace: _Optional[str] = ..., name: _Optional[str] = ..., key_field: _Optional[str] = ..., time_field: _Optional[str] = ..., time_unit: _Optional[_Union[TimeUnit, str]] = ..., ack_mode: _Optional[_Union[AckMode, str]] = ..., partitions: _Optional[int] = ..., created_at_ns: _Optional[int] = ..., columns: _Optional[_Iterable[_Union[Column, _Mapping]]] = ..., stats: _Optional[_Union[FeedStats, _Mapping]] = ..., arrival_time: bool = ..., deleted_at_ns: _Optional[int] = ..., purge_at_ns: _Optional[int] = ...) -> None: ...
 
 class DeleteFeedRequest(_message.Message):
     __slots__ = ("feed",)
@@ -422,7 +422,7 @@ class ListFeedsRequest(_message.Message):
     DELETED_FIELD_NUMBER: _ClassVar[int]
     namespace: str
     deleted: bool
-    def __init__(self, namespace: _Optional[str] = ..., deleted: _Optional[bool] = ...) -> None: ...
+    def __init__(self, namespace: _Optional[str] = ..., deleted: bool = ...) -> None: ...
 
 class ListFeedsResponse(_message.Message):
     __slots__ = ("feeds",)
@@ -460,7 +460,7 @@ class Accepted(_message.Message):
     partition: int
     offset: int
     duplicate: bool
-    def __init__(self, message_id: _Optional[str] = ..., receive_time_ns: _Optional[int] = ..., partition: _Optional[int] = ..., offset: _Optional[int] = ..., duplicate: _Optional[bool] = ...) -> None: ...
+    def __init__(self, message_id: _Optional[str] = ..., receive_time_ns: _Optional[int] = ..., partition: _Optional[int] = ..., offset: _Optional[int] = ..., duplicate: bool = ...) -> None: ...
 
 class Rejection(_message.Message):
     __slots__ = ("message_id", "reason", "detail")
@@ -492,7 +492,7 @@ class Value(_message.Message):
     int_value: int
     float_value: float
     string_value: str
-    def __init__(self, bool_value: _Optional[bool] = ..., int_value: _Optional[int] = ..., float_value: _Optional[float] = ..., string_value: _Optional[str] = ...) -> None: ...
+    def __init__(self, bool_value: bool = ..., int_value: _Optional[int] = ..., float_value: _Optional[float] = ..., string_value: _Optional[str] = ...) -> None: ...
 
 class Filter(_message.Message):
     __slots__ = ("column", "op", "values")
@@ -550,7 +550,7 @@ class ReadRequest(_message.Message):
     include_payload: bool
     at_position: Position
     dedupe: Dedupe
-    def __init__(self, feed: _Optional[_Union[FeedRef, _Mapping]] = ..., start_event_time_ns: _Optional[int] = ..., end_event_time_ns: _Optional[int] = ..., as_of_ns: _Optional[int] = ..., filters: _Optional[_Iterable[_Union[Filter, _Mapping]]] = ..., columns: _Optional[_Iterable[str]] = ..., limit: _Optional[int] = ..., include_payload: _Optional[bool] = ..., at_position: _Optional[_Union[Position, _Mapping]] = ..., dedupe: _Optional[_Union[Dedupe, _Mapping]] = ...) -> None: ...
+    def __init__(self, feed: _Optional[_Union[FeedRef, _Mapping]] = ..., start_event_time_ns: _Optional[int] = ..., end_event_time_ns: _Optional[int] = ..., as_of_ns: _Optional[int] = ..., filters: _Optional[_Iterable[_Union[Filter, _Mapping]]] = ..., columns: _Optional[_Iterable[str]] = ..., limit: _Optional[int] = ..., include_payload: bool = ..., at_position: _Optional[_Union[Position, _Mapping]] = ..., dedupe: _Optional[_Union[Dedupe, _Mapping]] = ...) -> None: ...
 
 class ReadResponse(_message.Message):
     __slots__ = ("batch", "position", "server_ns")
@@ -600,7 +600,7 @@ class SubscribeRequest(_message.Message):
     delivery: Delivery
     include_payload: bool
     dedupe: Dedupe
-    def __init__(self, feed: _Optional[_Union[FeedRef, _Mapping]] = ..., from_beginning: _Optional[bool] = ..., from_event_time_ns: _Optional[int] = ..., from_now: _Optional[bool] = ..., from_last: _Optional[int] = ..., speed: _Optional[float] = ..., filters: _Optional[_Iterable[_Union[Filter, _Mapping]]] = ..., columns: _Optional[_Iterable[str]] = ..., delivery: _Optional[_Union[Delivery, str]] = ..., include_payload: _Optional[bool] = ..., dedupe: _Optional[_Union[Dedupe, _Mapping]] = ...) -> None: ...
+    def __init__(self, feed: _Optional[_Union[FeedRef, _Mapping]] = ..., from_beginning: bool = ..., from_event_time_ns: _Optional[int] = ..., from_now: bool = ..., from_last: _Optional[int] = ..., speed: _Optional[float] = ..., filters: _Optional[_Iterable[_Union[Filter, _Mapping]]] = ..., columns: _Optional[_Iterable[str]] = ..., delivery: _Optional[_Union[Delivery, str]] = ..., include_payload: bool = ..., dedupe: _Optional[_Union[Dedupe, _Mapping]] = ...) -> None: ...
 
 class CaughtUp(_message.Message):
     __slots__ = ("history_events", "position")

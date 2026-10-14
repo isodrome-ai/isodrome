@@ -5,7 +5,7 @@ import warnings
 
 from isodrome.v1 import isodrome_pb2 as isodrome_dot_v1_dot_isodrome__pb2
 
-GRPC_GENERATED_VERSION = '1.84.0'
+GRPC_GENERATED_VERSION = '1.75.1'
 GRPC_VERSION = grpc.__version__
 _version_not_supported = False
 
@@ -18,14 +18,14 @@ except ImportError:
 if _version_not_supported:
     raise RuntimeError(
         f'The grpc package installed is at version {GRPC_VERSION},'
-        + ' but the generated code in isodrome/v1/isodrome_pb2_grpc.py depends on'
+        + f' but the generated code in isodrome/v1/isodrome_pb2_grpc.py depends on'
         + f' grpcio>={GRPC_GENERATED_VERSION}.'
         + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
         + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
     )
 
 
-class IsodromeStub:
+class IsodromeStub(object):
     """Missing associated documentation comment in .proto file."""
 
     def __init__(self, channel):
@@ -131,7 +131,7 @@ class IsodromeStub:
                 _registered_method=True)
 
 
-class IsodromeServicer:
+class IsodromeServicer(object):
     """Missing associated documentation comment in .proto file."""
 
     def GetServerInfo(self, request, context):
@@ -368,7 +368,7 @@ def add_IsodromeServicer_to_server(servicer, server):
 
 
  # This class is part of an EXPERIMENTAL API.
-class Isodrome:
+class Isodrome(object):
     """Missing associated documentation comment in .proto file."""
 
     @staticmethod
