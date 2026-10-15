@@ -30,6 +30,10 @@ class FakeIsodrome(pb_grpc.IsodromeServicer):
 
     def __init__(self):
         self.namespaces = ["default"]
+        self.public_namespaces: set[str] = set()
+        self.service_accounts: list[pb.ServiceAccount] = []
+        self.connections: list[pb.Connection] = []
+        self.requests: list[str] = []
         self.feeds: dict[tuple[str, str], pb.Feed] = {}
         self.events: dict[tuple[str, str], list[tuple[int, dict]]] = {}
         self.seen_ids: set[str] = set()
@@ -45,7 +49,9 @@ class FakeIsodrome(pb_grpc.IsodromeServicer):
             context.abort(grpc.StatusCode.UNAUTHENTICATED, "invalid API key")
 
     def _feed(self, ref, context) -> tuple[str, str]:
-        key = (ref.namespace or "default", ref.name)
+        # Another organization's feeds are stored under "org/namespace".
+        ns = ref.namespace or "default"
+        key = (f"{ref.organization}/{ns}" if ref.organization not in ("", "acme") else ns, ref.name)
         if key not in self.feeds:
             context.abort(grpc.StatusCode.NOT_FOUND, f"feed {ref.name} not found")
         return key
@@ -78,12 +84,57 @@ class FakeIsodrome(pb_grpc.IsodromeServicer):
 
     def ListNamespaces(self, request, context):
         self._auth(context)
-        return pb.ListNamespacesResponse(namespaces=[pb.Namespace(name=n) for n in self.namespaces])
+        if request.public:
+            mine = [pb.Namespace(name=n, organization="acme", public=True) for n in sorted(self.public_namespaces)]
+            return pb.ListNamespacesResponse(
+                namespaces=mine + [pb.Namespace(name="public", organization="isodrome", public=True)]
+            )
+        return pb.ListNamespacesResponse(namespaces=[
+            pb.Namespace(name=n, organization="acme", public=n in self.public_namespaces) for n in self.namespaces
+        ])
 
     def CreateNamespace(self, request, context):
         self._auth(context)
         self.namespaces.append(request.name)
-        return pb.Namespace(name=request.name, organization="acme")
+        if request.public:
+            self.public_namespaces.add(request.name)
+        return pb.Namespace(name=request.name, organization="acme", public=request.public)
+
+    def UpdateNamespace(self, request, context):
+        self._auth(context)
+        (self.public_namespaces.add if request.public else self.public_namespaces.discard)(request.name)
+        return pb.Namespace(name=request.name, organization="acme", public=request.public)
+
+    def CreateServiceAccount(self, request, context):
+        self._auth(context)
+        sa = pb.ServiceAccount(id=f"sa{len(self.service_accounts)}", name=request.name, role=request.role)
+        self.service_accounts.append(sa)
+        return sa
+
+    def ListServiceAccounts(self, request, context):
+        self._auth(context)
+        return pb.ListServiceAccountsResponse(service_accounts=self.service_accounts)
+
+    def ListConnectorTemplates(self, request, context):
+        self._auth(context)
+        return pb.ListConnectorTemplatesResponse(templates=[pb.ConnectorTemplate(
+            name="met_eireann.point_forecast", version=1, description="Forecasts", poll_interval_ms=900_000,
+            options_example='{"locations": []}', feeds=[pb.ConnectorFeed(name="forecast", licence="CC BY 4.0")],
+        )])
+
+    def CreateConnection(self, request, context):
+        self._auth(context)
+        c = pb.Connection(
+            name=request.name, template=request.template, namespace=request.namespace or "default",
+            options_json=request.options_json or "{}", status="paused" if request.paused else "pending",
+            paused=request.paused, service_account=f"connection-{request.name}", feeds=["forecast"],
+        )
+        self.connections.append(c)
+        return c
+
+    def ListConnections(self, request, context):
+        self._auth(context)
+        return pb.ListConnectionsResponse(connections=self.connections)
 
     def RevokeApiKey(self, request, context):
         self._auth(context)
@@ -92,6 +143,9 @@ class FakeIsodrome(pb_grpc.IsodromeServicer):
 
     def CreateFeed(self, request, context):
         self._auth(context)
+        self.requests.append("CreateFeed")
+        if request.feed.organization not in ("", "acme"):
+            context.abort(grpc.StatusCode.PERMISSION_DENIED, "another organization's feed")
         ns = request.feed.namespace or "default"
         if (ns, request.feed.name) in self.feeds:
             context.abort(grpc.StatusCode.ALREADY_EXISTS, "feed exists")
@@ -99,6 +153,7 @@ class FakeIsodrome(pb_grpc.IsodromeServicer):
             id=f"id-{request.feed.name}", organization="acme", namespace=ns, name=request.feed.name,
             time_field="" if request.arrival_time else (request.time_field or "event_time"),
             arrival_time=request.arrival_time, ack_mode=pb.ACK_MODE_REPLICATED, partitions=1,
+            public=ns in self.public_namespaces, attribution=request.attribution, licence=request.licence,
         )
         if request.HasField("key_field"):
             feed.key_field = request.key_field
@@ -113,7 +168,19 @@ class FakeIsodrome(pb_grpc.IsodromeServicer):
     def ListFeeds(self, request, context):
         self._auth(context)
         ns = request.namespace or "default"
+        if request.organization not in ("", "acme"):
+            ns = f"{request.organization}/{ns}"
         return pb.ListFeedsResponse(feeds=[f for (n, _), f in self.feeds.items() if n == ns])
+
+    def add_public_feed(self):
+        """isodrome/public/forecasts: another organization's public feed, with an attribution."""
+        key = ("isodrome/public", "forecasts")
+        self.feeds[key] = pb.Feed(
+            id="id-forecasts", organization="isodrome", namespace="public", name="forecasts", key_field="location",
+            time_field="valid_to", public=True, description="Point forecasts", licence="CC BY 4.0",
+            attribution="Copyright Met Éireann", publication_time_field="published",
+        )
+        self.events[key] = [(1, {"price": 7.5, "symbol": "dublin"})]
 
     def Send(self, request_iterator, context):
         self._auth(context)
@@ -143,7 +210,7 @@ class FakeIsodrome(pb_grpc.IsodromeServicer):
         events = self.events[key]
         table = pa.table({
             "_event_time": pa.array([t for t, _ in events], pa.timestamp("ns", tz="UTC")),
-            "price": pa.array([e["price"] for _, e in events], pa.float64()),
+            "price": pa.array([e.get("price") for _, e in events], pa.float64()),
             "_key": pa.array([e.get("symbol") for _, e in events], pa.string()),
             "_payload": pa.array([json.dumps(e) for _, e in events], pa.string()),
         })

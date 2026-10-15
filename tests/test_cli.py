@@ -116,7 +116,7 @@ def test_namespace_use(iso, fake):
     assert iso("namespace", "use", "nope").exit_code == 1
     assert iso("namespace", "use", "research").exit_code == 0
     assert Config.load().profile().namespace == "research"
-    assert "* research" in iso("namespace", "list").output
+    assert any(line.split()[:2] == ["*", "research"] for line in iso("namespace", "list").output.splitlines())
     iso("feed", "create", "quotes")
     assert ("research", "quotes") in fake.feeds
     assert iso("namespace", "use", "--default").exit_code == 0
