@@ -128,3 +128,48 @@ def test_logout_revokes_a_signed_in_key():
     assert Config.load().profiles["reader"].api_key is None
     refused = iso("--endpoint", ENDPOINT, "--api-key", reader_key, "whoami")
     assert refused.exit_code == 1 and "UNAUTHENTICATED" in refused.output
+
+
+OTHER_KEY = os.environ.get("ISODROME_E2E_OTHER_KEY")
+
+
+@pytest.mark.skipif(not OTHER_KEY, reason="set ISODROME_E2E_OTHER_KEY: an admin key of a second organization")
+def test_public_feeds_across_organizations():
+    """`local` (allowed to publish) makes a public namespace; another organization finds and
+    reads its feed, and cannot change it."""
+    ns = f"pub{uuid.uuid4().hex[:8]}"
+    ok("login", "--endpoint", ENDPOINT, "--api-key", KEY)
+    ok("namespace", "create", ns, "--public")
+    ok("feed", "create", f"{ns}/rates", "--attribution", "Test Bank", "--licence", "CC BY 4.0")
+    ok("feed", "push", f"{ns}/rates", "--data", '{"ccy": "EUR", "rate": 1.08}')
+    ok("feed", "create", "private_one")  # in default: not public
+
+    other = ("--endpoint", ENDPOINT, "--api-key", OTHER_KEY)
+    ref = f"local/{ns}/rates"
+
+    def listed():
+        rows = {r["feed"]: r for r in map(json.loads, ok(*other, "feed", "list", "-o", "json").stdout.splitlines())}
+        assert rows[ref]["access"] == "public, read-only"
+        return rows
+
+    rows = eventually(listed)
+    assert not any("private_one" in f for f in rows)
+    assert ref not in ok(*other, "feed", "list", "--mine", "-o", "json").stdout
+    assert f"local/{ns}" in ok(*other, "namespace", "list").stdout
+
+    def read():
+        result = ok(*other, "feed", "query", ref, "-o", "json")
+        assert [json.loads(l)["rate"] for l in result.stdout.splitlines()] == [1.08]
+        return result
+
+    assert "Data: Test Bank" in eventually(read).stderr
+    shown = ok(*other, "feed", "show", ref).output
+    assert "public, read-only (local)" in shown and "attribution: Test Bank" in shown
+
+    refused = iso(*other, "feed", "push", ref, "--data", "{}")
+    assert refused.exit_code == 1 and "can be read, but not changed" in refused.output
+
+    ok("feed", "delete", f"{ns}/rates", "--yes")
+    ok("feed", "delete", "private_one", "--yes")
+    ok("namespace", "update", ns, "--private")
+    assert f"local/{ns}" not in ok(*other, "namespace", "list").stdout

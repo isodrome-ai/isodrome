@@ -19,11 +19,19 @@ service Isodrome {
   rpc WhoAmI(WhoAmIRequest) returns (WhoAmIResponse);
   rpc CreateNamespace(CreateNamespaceRequest) returns (Namespace);
   rpc ListNamespaces(ListNamespacesRequest) returns (ListNamespacesResponse);
+  // Make a namespace public (readable from every organization) or private. ADMIN only, and
+  // only for organizations the server allows to publish (ISODROME_PUBLIC_ORGANIZATIONS).
+  rpc UpdateNamespace(UpdateNamespaceRequest) returns (Namespace);
   // Only an empty namespace (no feeds) that no active key uses as its default.
   rpc DeleteNamespace(DeleteNamespaceRequest) returns (DeleteNamespaceResponse);  // ADMIN only
   rpc CreateApiKey(CreateApiKeyRequest) returns (CreateApiKeyResponse);    // personal: anyone; else ADMIN
   rpc ListApiKeys(ListApiKeysRequest) returns (ListApiKeysResponse);       // ADMIN: all; others: their own
   rpc RevokeApiKey(RevokeApiKeyRequest) returns (ApiKey);                  // ADMIN: any; others: their own, or the one in use (logout)
+  // Service accounts: identities that cannot sign in and hold API keys (connectors, CI). ADMIN.
+  rpc CreateServiceAccount(CreateServiceAccountRequest) returns (ServiceAccount);
+  rpc ListServiceAccounts(ListServiceAccountsRequest) returns (ListServiceAccountsResponse);
+  // Revokes all its credentials at once.
+  rpc DeleteServiceAccount(DeleteServiceAccountRequest) returns (DeleteServiceAccountResponse);
 
   // Feeds
   rpc CreateFeed(CreateFeedRequest) returns (Feed);
@@ -35,6 +43,19 @@ service Isodrome {
   rpc DeleteFeed(DeleteFeedRequest) returns (Feed);                        // WRITER or ADMIN
   rpc UndeleteFeed(UndeleteFeedRequest) returns (Feed);                    // WRITER or ADMIN
   rpc ListRejections(ListRejectionsRequest) returns (ListRejectionsResponse);
+
+  // Connectors: Isodrome-run downloaders that fill feeds from outside sources. A template is a
+  // kind of connector (e.g. "met_eireann.point_forecast"); a connection is one running instance
+  // of a template in a namespace, with its options. Creating a connection creates its feeds and
+  // a service account it writes as; workers then run it. Viewing: READER; changing: ADMIN.
+  rpc ListConnectorTemplates(ListConnectorTemplatesRequest) returns (ListConnectorTemplatesResponse);
+  rpc CreateConnection(CreateConnectionRequest) returns (Connection);
+  rpc ListConnections(ListConnectionsRequest) returns (ListConnectionsResponse);
+  rpc GetConnection(GetConnectionRequest) returns (Connection);
+  rpc PauseConnection(PauseConnectionRequest) returns (Connection);
+  rpc ResumeConnection(ResumeConnectionRequest) returns (Connection);
+  // Stops it and deletes its service account. Its feeds and their data stay.
+  rpc DeleteConnection(DeleteConnectionRequest) returns (DeleteConnectionResponse);
 
   // Data
   rpc Send(stream SendRequest) returns (stream SendResponse);
@@ -90,9 +111,18 @@ message Namespace {
   string organization = 2;
   string name = 3;
   int64 created_at_ns = 4;
+  bool public = 5;                   // readable by every signed-in principal, in any organization
 }
-message CreateNamespaceRequest { string name = 1; }          // ADMIN only
-message ListNamespacesRequest {}
+message CreateNamespaceRequest {     // ADMIN only
+  string name = 1;
+  bool public = 2;                   // only where the server allows the organization to publish
+}
+message UpdateNamespaceRequest {
+  string name = 1;
+  optional bool public = 2;
+}
+// Your organization's namespaces, or (public = true) every organization's public ones.
+message ListNamespacesRequest { bool public = 1; }
 message ListNamespacesResponse { repeated Namespace namespaces = 1; }
 message DeleteNamespaceRequest { string name = 1; }
 message DeleteNamespaceResponse {}
@@ -118,7 +148,24 @@ message CreateApiKeyRequest {
   // membership and stops working if you leave. Any member may create one. Otherwise (ADMIN
   // only) an organization key with a fixed role.
   bool personal = 4;
+  // ADMIN: a key owned by this service account, acting as it (with at most `role`).
+  string service_account = 5;
 }
+
+message ServiceAccount {
+  string id = 1;
+  string name = 2;
+  Role role = 3;                     // its role in the organization
+  int64 created_at_ns = 4;
+}
+message CreateServiceAccountRequest {
+  string name = 1;                   // ^[a-z][a-z0-9_-]{0,62}$, unique in the organization
+  Role role = 2;
+}
+message ListServiceAccountsRequest {}
+message ListServiceAccountsResponse { repeated ServiceAccount service_accounts = 1; }
+message DeleteServiceAccountRequest { string name = 1; }
+message DeleteServiceAccountResponse {}
 message CreateApiKeyResponse {
   ApiKey key = 1;
   string api_key = 2;                // the full key, iso_<key_id>_<secret>; not retrievable later
@@ -135,6 +182,9 @@ message RevokeApiKeyRequest { string key_id = 1; }          // takes effect imme
 message FeedRef {
   string namespace = 1;
   string name = 2;
+  // Another organization, whose namespace must be public; such feeds can only be read. Empty:
+  // the credential's own organization.
+  string organization = 3;
 }
 
 enum TimeUnit {
@@ -210,6 +260,13 @@ message CreateFeedRequest {
   optional int32 partitions = 6;    // default from config; forced to 1 when key_field is absent
   // No time field: an event's time is when the server received it (time_field must be empty).
   bool arrival_time = 7;
+  // When the source published each event (dotted path; RFC 3339, or an integer in the feed's
+  // time unit). Optional, and blank for events that lack it.
+  optional string publication_time_field = 8;
+  string description = 9;
+  string licence = 10;
+  string attribution = 11;
+  string source_url = 12;
 }
 
 // Changes a feed's settings. Only the fields set change; each applies to events received from
@@ -223,6 +280,11 @@ message UpdateFeedRequest {
   // Only while the feed has no events (FAILED_PRECONDITION otherwise): data already stored is
   // partitioned and indexed by the old key. "" = unkeyed (only for a one-partition feed).
   optional string key_field = 6;
+  optional string publication_time_field = 7;  // "" = none
+  optional string description = 8;
+  optional string licence = 9;
+  optional string attribution = 10;
+  optional string source_url = 11;
 }
 
 message Feed {
@@ -241,6 +303,13 @@ message Feed {
   bool arrival_time = 13;           // no time field: event time = when the server received it
   int64 deleted_at_ns = 14;         // 0 unless deleted
   int64 purge_at_ns = 15;           // deleted feeds: when their data is removed for good
+  string publication_time_field = 16;  // empty: none
+  // Where the data comes from and on what terms; show the attribution wherever it is shown.
+  string description = 17;
+  string licence = 18;
+  string attribution = 19;
+  string source_url = 20;
+  bool public = 21;                 // in a public namespace
 }
 
 message DeleteFeedRequest { FeedRef feed = 1; }
@@ -255,6 +324,7 @@ message GetFeedRequest { FeedRef feed = 1; }
 message ListFeedsRequest {
   string namespace = 1;             // empty = key's default namespace
   bool deleted = 2;                 // list deleted feeds that can still be undeleted instead
+  string organization = 3;          // another organization's public namespace (see FeedRef)
 }
 message ListFeedsResponse { repeated Feed feeds = 1; }
 
@@ -264,6 +334,7 @@ message Event {
   bytes payload = 1;                 // UTF-8 JSON object
   optional int64 event_time_ns = 2;  // if set, overrides time_field
   string message_id = 3;             // required; client-generated; unique per feed; makes retries idempotent
+  optional int64 published_time_ns = 4;  // if set, overrides publication_time_field
 }
 
 message SendRequest {
@@ -370,6 +441,19 @@ message ReadRequest {
   optional Position at_position = 9;
   // Keep one event per distinct value of these columns, before `filters` are applied.
   optional Dedupe dedupe = 10;
+  AsOfBasis as_of_basis = 11;               // what `as_of_ns` is compared with
+}
+
+// Which time `as_of_ns` means.
+enum AsOfBasis {
+  AS_OF_BASIS_UNSPECIFIED = 0;  // treated as RECEIVED
+  // What Isodrome knew at T: _receive_time <= T. Exactly a log position per partition, so the
+  // same question always has the same answer.
+  AS_OF_BASIS_RECEIVED = 1;
+  // What the source had published by T: _published_time <= T, falling back to _receive_time
+  // for events without a publication time. For backfilled history, which Isodrome received
+  // long after it was published.
+  AS_OF_BASIS_PUBLISHED = 2;
 }
 message ReadResponse {
   ArrowBatch batch = 1;
@@ -395,6 +479,17 @@ enum DedupeKeep {
 message Dedupe {
   repeated string columns = 1;  // e.g. ["_key"] or ["trade_id"]; at least one
   DedupeKeep keep = 2;
+  DedupeOrder order = 3;
+}
+
+// Which version is "first" and "last".
+enum DedupeOrder {
+  DEDUPE_ORDER_UNSPECIFIED = 0;  // treated as ARRIVAL
+  DEDUPE_ORDER_ARRIVAL = 1;      // (_receive_time, _partition, _offset)
+  // _published_time first (falling back to _receive_time when blank), then arrival: the latest
+  // *published* version wins even if it arrived first, as in a backfill. E.g. each forecast hour
+  // as of the most recent model run.
+  DEDUPE_ORDER_PUBLICATION = 2;
 }
 
 enum Delivery {
@@ -433,3 +528,60 @@ message SubscribeResponse {
     Heartbeat heartbeat = 3;
   }
 }
+
+// ---------- Connectors ----------
+
+message ConnectorTemplate {
+  string name = 1;                   // e.g. "met_eireann.point_forecast"
+  uint32 version = 2;
+  string description = 3;
+  string options_example = 4;        // JSON
+  repeated ConnectorFeed feeds = 5;  // the feeds a connection creates
+  int64 poll_interval_ms = 6;
+}
+message ConnectorFeed {
+  string name = 1;
+  string key_field = 2;              // empty: unkeyed
+  string time_field = 3;             // empty: arrival time
+  string publication_time_field = 4; // empty: none
+  string description = 5;
+  string licence = 6;
+  string attribution = 7;
+  string source_url = 8;
+}
+message ListConnectorTemplatesRequest {}
+message ListConnectorTemplatesResponse { repeated ConnectorTemplate templates = 1; }
+
+message Connection {
+  string id = 1;
+  string name = 2;
+  string template = 3;
+  string namespace = 4;
+  string options_json = 5;           // as validated, with the template's defaults filled in
+  string service_account = 6;        // the identity it writes as
+  bool paused = 7;
+  // "pending" (waiting for a worker), "running", "failing" (see status_detail) or "paused".
+  string status = 8;
+  string status_detail = 9;
+  string cursor_json = 10;           // where in the source it has got to (template-specific)
+  string worker = 11;                // the worker running it, if any
+  int64 last_heartbeat_at_ns = 12;   // 0: never
+  int64 last_event_at_ns = 13;       // 0: never
+  int64 events_sent = 14;
+  int64 created_at_ns = 15;
+  repeated string feeds = 16;
+}
+message CreateConnectionRequest {
+  string name = 1;                   // ^[a-z][a-z0-9_-]{0,62}$, unique in the organization
+  string template = 2;
+  string namespace = 3;              // empty: the credential's default namespace
+  string options_json = 4;           // empty: the template's defaults
+  bool paused = 5;                   // create without starting it
+}
+message ListConnectionsRequest {}
+message ListConnectionsResponse { repeated Connection connections = 1; }
+message GetConnectionRequest { string name = 1; }
+message PauseConnectionRequest { string name = 1; }
+message ResumeConnectionRequest { string name = 1; }
+message DeleteConnectionRequest { string name = 1; }
+message DeleteConnectionResponse {}

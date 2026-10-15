@@ -31,6 +31,8 @@ TIME_UNITS = {
 }
 ACK_MODES = {"replicated": pb.ACK_MODE_REPLICATED, "none": pb.ACK_MODE_NONE}
 KEEP = {"first": pb.DEDUPE_KEEP_FIRST, "last": pb.DEDUPE_KEEP_LAST}
+DEDUPE_ORDERS = {"arrival": pb.DEDUPE_ORDER_ARRIVAL, "publication": pb.DEDUPE_ORDER_PUBLICATION}
+AS_OF_BASES = {"received": pb.AS_OF_BASIS_RECEIVED, "published": pb.AS_OF_BASIS_PUBLISHED}
 
 format_option = click.option(
     "-o", "--format", "fmt", type=click.Choice(output.FORMATS), default="table", show_default=True
@@ -42,6 +44,10 @@ column_option = click.option("-c", "--column", "columns", multiple=True, help="O
 dedupe_options = [
     click.option("--dedupe", multiple=True, help="Keep one event per value of this column (e.g. _key). Repeatable."),
     click.option("--keep", type=click.Choice(list(KEEP)), default="last", show_default=True, help="With --dedupe."),
+    click.option(
+        "--dedupe-order", type=click.Choice(list(DEDUPE_ORDERS)), default="arrival", show_default=True,
+        help="With --dedupe: which version is first/last, by arrival or by publication time.",
+    ),
 ]
 
 
@@ -66,10 +72,11 @@ _INTERNAL = ("_partition", "_offset", "_message_id", "_receive_time")
 
 
 def _readable(table):
-    """A table without internal columns, and without `_key` when the feed has no key."""
+    """A table without internal columns, nor `_key` or `_published_time` when they are empty."""
     drop = [c for c in _INTERNAL if c in table.column_names]
-    if "_key" in table.column_names and table.column("_key").null_count == table.num_rows:
-        drop.append("_key")
+    for optional in ("_key", "_published_time"):
+        if optional in table.column_names and table.column(optional).null_count == table.num_rows:
+            drop.append(optional)
     return table.drop_columns(drop)
 
 
@@ -77,8 +84,15 @@ def _filters(filters) -> list[pb.Filter]:
     return [_value(parse_filter, f, "--where") for f in filters]
 
 
-def _dedupe(columns, keep: str) -> pb.Dedupe | None:
-    return pb.Dedupe(columns=list(columns), keep=KEEP[keep]) if columns else None
+def _dedupe(columns, keep: str, order: str) -> pb.Dedupe | None:
+    return pb.Dedupe(columns=list(columns), keep=KEEP[keep], order=DEDUPE_ORDERS[order]) if columns else None
+
+
+def _attribution(ctx: Context, ref: pb.FeedRef) -> None:
+    """Data from a source that asks for credit is shown with it (on stderr, apart from the data)."""
+    f = ctx.client().call("GetFeed", pb.GetFeedRequest(feed=ref))
+    if f.attribution:
+        click.secho(f"Data: {f.attribution}", dim=True, err=True)
 
 
 @click.group()
@@ -89,6 +103,15 @@ def feed() -> None:
 # ---------- Managing feeds ----------
 
 
+# Where the data comes from and on what terms: shown with the feed, and with its data.
+provenance_options = [
+    click.option("--description", help="What the feed holds."),
+    click.option("--licence", help='The terms the data may be used on, e.g. "CC BY 4.0".'),
+    click.option("--attribution", help="Credit to show wherever the data is shown."),
+    click.option("--source-url", help="Where the data comes from."),
+]
+
+
 @feed.command("create")
 @click.argument("name")
 @namespace_option
@@ -97,14 +120,19 @@ def feed() -> None:
     "--time-field", help="Field holding each event's own time, e.g. event_time. Default: the time it arrives."
 )
 @click.option("--time-unit", type=click.Choice(list(TIME_UNITS)), help="Unit of integer event times (recommended).")
+@click.option(
+    "--publication-time-field", help="Field holding when the source published each event (optional; for as-of)."
+)
 @click.option("--arrival-time", is_flag=True, hidden=True)  # the default; accepted for explicitness
 @click.option("--ack", type=click.Choice(list(ACK_MODES)), default="replicated", show_default=True)
 @click.option("--partitions", type=int, help="Partitions of a keyed feed (default: the server's).")
+@_apply(provenance_options)
 @pass_context
 def feed_create(
-    ctx: Context, name, namespace, key_field, time_field, time_unit, arrival_time, ack, partitions
+    ctx: Context, name, namespace, key_field, time_field, time_unit, publication_time_field, arrival_time, ack,
+    partitions, description, licence, attribution, source_url,
 ) -> None:
-    """Create feed NAME.
+    """Create feed NAME (or NAMESPACE/NAME).
 
     Each event is a JSON object. By default its time is when it arrives; with --time-field it
     is the event's own time from that field, and events without it are rejected (late events
@@ -116,18 +144,24 @@ def feed_create(
     if arrival_time and time_field:
         raise click.UsageError("--arrival-time and --time-field are exclusive")
     request = pb.CreateFeedRequest(
-        feed=ctx.feed_ref(name, namespace),
+        feed=ctx.writable_ref(name, namespace),
         time_field=time_field or "",
         arrival_time=not time_field,
         time_unit=TIME_UNITS.get(time_unit, pb.TIME_UNIT_UNSPECIFIED),
         ack_mode=ACK_MODES[ack],
+        description=description or "",
+        licence=licence or "",
+        attribution=attribution or "",
+        source_url=source_url or "",
     )
     if key_field is not None:
         request.key_field = key_field
     if partitions is not None:
         request.partitions = partitions
+    if publication_time_field:
+        request.publication_time_field = publication_time_field
     f = ctx.client().call("CreateFeed", request)
-    click.echo(f"Created feed {f.namespace}/{f.name}.")
+    click.echo(f"Created feed {f.namespace}/{f.name}{' (public)' if f.public else ''}.")
     if f.arrival_time:
         click.echo("Events are timed when they arrive (--time-field to use a time in the events).", err=True)
     else:
@@ -135,78 +169,137 @@ def feed_create(
 
 
 @feed.command("list")
-@namespace_option
-@click.option("--deleted", is_flag=True, help="List deleted feeds that can still be undeleted.")
+@click.option(
+    "-n", "--namespace", default=None,
+    help="Only this namespace (NAME, or ORGANIZATION/NAME for another organization's public one).",
+)
+@click.option("--public", "public_only", is_flag=True, help="Only public feeds (readable from every organization).")
+@click.option("--mine", is_flag=True, help="Only your organization's feeds.")
+@click.option("--deleted", is_flag=True, help="Deleted feeds that can still be undeleted.")
+@format_option
 @pass_context
-def feed_list(ctx: Context, namespace, deleted) -> None:
-    """List the feeds in a namespace."""
-    feeds = ctx.client().call("ListFeeds", pb.ListFeedsRequest(namespace=ctx.namespace(namespace), deleted=deleted))
-    if not feeds.feeds:
-        click.echo("(no deleted feeds)" if deleted else "(no feeds)")
-    for f in feeds.feeds:
-        line = (
-            f"{f.namespace + '/' + f.name:<32} key={(f.key_field if f.HasField('key_field') else '-'):<16} "
-            f"time={'(arrival)' if f.arrival_time else f.time_field:<16} "
-            f"ack={short_enum(pb.AckMode, f.ack_mode)}"
+def feed_list(ctx: Context, namespace, public_only, mine, deleted, fmt) -> None:
+    """List feeds: your organization's, in every namespace, and other organizations' public ones.
+
+    FEED is how to refer to each one in other commands: NAMESPACE/FEED in your organization,
+    ORGANIZATION/NAMESPACE/FEED in another. ACCESS says who can read it: `org` (your
+    organization), `public` (everyone; yours to change) or `public, read-only` (another
+    organization's).
+    """
+    client = ctx.client()
+    me = ctx.me()
+    if namespace:
+        organization, ns = ctx.scope(namespace)
+        places = [(organization, ns)]
+    else:
+        places = [
+            ("", n.name)
+            for n in client.call("ListNamespaces", pb.ListNamespacesRequest()).namespaces
+            if n.public or not public_only
+        ]
+        if not mine and not deleted:
+            places += [
+                (n.organization, n.name)
+                for n in client.call("ListNamespaces", pb.ListNamespacesRequest(public=True)).namespaces
+                if n.organization != me.organization
+            ]
+    rows = []
+    for organization, ns in places:
+        listed = client.call(
+            "ListFeeds", pb.ListFeedsRequest(organization=organization, namespace=ns, deleted=deleted)
         )
-        if f.deleted_at_ns:
-            line += f"  deleted {format_ns(f.deleted_at_ns)}, purged {format_ns(f.purge_at_ns)} (id {f.id})"
-        elif f.stats.rejections.last_hour:
-            line += click.style(f"  {f.stats.rejections.last_hour} rejected in the last hour", fg="red")
-        click.echo(line)
+        for f in listed.feeds:
+            if public_only and not f.public:
+                continue
+            ours = f.organization in ("", me.organization)
+            row = {
+                "feed": ctx.display_ref(f.organization, f.namespace, f.name),
+                "access": "org" if not f.public else "public" if ours else "public, read-only",
+                "key": f.key_field if f.HasField("key_field") and f.key_field else "-",
+                "time": "(arrival)" if f.arrival_time else f.time_field,
+                "description": f.description,
+            }
+            if deleted:
+                row["deleted"] = format_ns(f.deleted_at_ns)
+                row["purged"] = format_ns(f.purge_at_ns)
+                row["id"] = f.id
+            elif f.stats.rejections.last_hour:
+                row["rejected (1h)"] = f.stats.rejections.last_hour
+            rows.append(row)
+    if fmt != "table":
+        columns = list(dict.fromkeys(c for row in rows for c in row))
+        output.Printer(fmt).rows(rows, columns)
+        return
+    if not rows:
+        click.echo("(no deleted feeds)" if deleted else "(no feeds)")
+        return
+    printer = output.Printer("table", max_width=50)
+    columns = list(dict.fromkeys(c for row in rows for c in row))
+    printer.rows(rows, columns)
+    if any(r.get("rejected (1h)") for r in rows):
+        click.secho("Some feeds are rejecting events: see `iso feed errors FEED`.", fg="red", err=True)
 
 
 @feed.command("show")
-@click.argument("name")
+@click.argument("feed_ref", metavar="FEED")
 @namespace_option
 @pass_context
-def feed_show(ctx: Context, name, namespace) -> None:
-    """Show a feed's settings, columns and stats."""
-    _print_feed(ctx.client().call("GetFeed", pb.GetFeedRequest(feed=ctx.feed_ref(name, namespace))))
+def feed_show(ctx: Context, feed_ref, namespace) -> None:
+    """Show a feed's settings, source, columns and stats."""
+    _print_feed(ctx, ctx.client().call("GetFeed", pb.GetFeedRequest(feed=ctx.feed_ref(feed_ref, namespace))))
 
 
 @feed.command("describe")
-@click.argument("name")
+@click.argument("feed_ref", metavar="FEED")
 @namespace_option
 @pass_context
-def feed_describe(ctx: Context, name, namespace) -> None:
+def feed_describe(ctx: Context, feed_ref, namespace) -> None:
     """Show a feed and how to send to it and query it."""
     client = ctx.client()
-    f = client.call("GetFeed", pb.GetFeedRequest(feed=ctx.feed_ref(name, namespace)))
+    f = client.call("GetFeed", pb.GetFeedRequest(feed=ctx.feed_ref(feed_ref, namespace)))
     info = client.server_info()
-    _print_feed(f)
-    example = _example_event(f)
+    _print_feed(ctx, f)
+    ours = f.organization in ("", ctx.me().organization)
+    # The shortest reference that works from here.
+    ref = feed_ref if not namespace else ctx.display_ref(f.organization, f.namespace, f.name)
 
-    ns = f" -n {f.namespace}" if namespace else ""
     click.echo()
     click.echo(f"server:      {info.public_url or ctx.endpoint} (version {info.version}, API {info.api_version})")
-    click.echo(f"limits:      {info.max_payload_bytes} bytes per event; retries de-duplicated for "
-               f"{info.dedupe_window_ns // 60_000_000_000} min by message id")
-    click.echo("send:")
-    click.echo(f"  iso feed push {f.name}{ns} --data '{json.dumps(example)}'")
-    click.echo(f"  iso feed push {f.name}{ns} --file events.jsonl     # JSON Lines or a JSON array")
+    if ours:
+        click.echo(f"limits:      {info.max_payload_bytes} bytes per event; retries de-duplicated for "
+                   f"{info.dedupe_window_ns // 60_000_000_000} min by message id")
+        click.echo("send:")
+        click.echo(f"  iso feed push {ref} --data '{json.dumps(_example_event(f))}'")
+        click.echo(f"  iso feed push {ref} --file events.jsonl     # JSON Lines or a JSON array")
+    else:
+        click.echo(f"access:      read-only: {f.organization} publishes it")
     click.echo("query:")
-    click.echo(f"  iso feed query {f.name}{ns} --since 1h")
-    click.echo(f"  iso feed tail {f.name}{ns}")
+    click.echo(f"  iso feed query {ref} --since 1h")
+    click.echo(f"  iso feed tail {ref}")
     if f.HasField("key_field") and f.key_field:
-        click.echo(f"  iso feed latest {f.name}{ns}")
+        click.echo(f"  iso feed latest {ref}")
 
 
 @feed.command("update")
-@click.argument("name")
+@click.argument("feed_ref", metavar="FEED")
 @namespace_option
 @click.option("--key", "key_field", help='New key field ("" = unkeyed); only while the feed has no events.')
 @click.option("--time-field", help="New time field (dotted path).")
 @click.option("--arrival-time", is_flag=True, help="No time field from now on: event time = arrival.")
 @click.option("--time-unit", type=click.Choice(list(TIME_UNITS)))
+@click.option("--publication-time-field", help='Field holding when the source published each event ("" = none).')
 @click.option("--ack", type=click.Choice(list(ACK_MODES)))
+@_apply(provenance_options)
 @pass_context
-def feed_update(ctx: Context, name, namespace, key_field, time_field, arrival_time, time_unit, ack) -> None:
-    """Change a feed's settings, for events received from now on."""
+def feed_update(
+    ctx: Context, feed_ref, namespace, key_field, time_field, arrival_time, time_unit, publication_time_field, ack,
+    description, licence, attribution, source_url,
+) -> None:
+    """Change a feed's settings (for events received from now on) or its description."""
     if arrival_time and time_field:
         raise click.UsageError("--arrival-time and --time-field are exclusive")
     request = pb.UpdateFeedRequest(
-        feed=ctx.feed_ref(name, namespace),
+        feed=ctx.writable_ref(feed_ref, namespace),
         time_unit=TIME_UNITS.get(time_unit, pb.TIME_UNIT_UNSPECIFIED),
         ack_mode=ACK_MODES.get(ack, pb.ACK_MODE_UNSPECIFIED),
     )
@@ -214,48 +307,58 @@ def feed_update(ctx: Context, name, namespace, key_field, time_field, arrival_ti
         request.time_field = time_field
     if arrival_time:
         request.arrival_time = True
-    if key_field is not None:
-        request.key_field = key_field
-    _print_feed(ctx.client().call("UpdateFeed", request))
+    for field, value in (
+        ("key_field", key_field),
+        ("publication_time_field", publication_time_field),
+        ("description", description),
+        ("licence", licence),
+        ("attribution", attribution),
+        ("source_url", source_url),
+    ):
+        if value is not None:
+            setattr(request, field, value)
+    _print_feed(ctx, ctx.client().call("UpdateFeed", request))
 
 
 @feed.command("delete")
-@click.argument("name")
+@click.argument("feed_ref", metavar="FEED")
 @namespace_option
 @click.option("-y", "--yes", is_flag=True, help="Do not ask for confirmation.")
 @pass_context
-def feed_delete(ctx: Context, name, namespace, yes) -> None:
+def feed_delete(ctx: Context, feed_ref, namespace, yes) -> None:
     """Delete a feed. It can be undeleted until its data is purged (7 days by default)."""
-    ref = ctx.feed_ref(name, namespace)
+    ref = ctx.writable_ref(feed_ref, namespace)
     if not yes:
-        click.confirm(f"Delete feed {ref.namespace or '(default)'}/{name}?", abort=True, err=True)
+        click.confirm(f"Delete feed {ref.namespace or '(default)'}/{ref.name}?", abort=True, err=True)
     f = ctx.client().call("DeleteFeed", pb.DeleteFeedRequest(feed=ref))
     click.echo(
         f"Deleted {f.namespace}/{f.name}. Its data is purged at {format_ns(f.purge_at_ns)}; "
-        f"until then: iso feed undelete {f.name}"
+        f"until then: iso feed undelete {f.namespace}/{f.name}"
     )
 
 
 @feed.command("undelete")
-@click.argument("name")
+@click.argument("feed_ref", metavar="FEED")
 @namespace_option
 @click.option("--id", "feed_id", default="", help="Which one, if several deleted feeds had this name.")
 @pass_context
-def feed_undelete(ctx: Context, name, namespace, feed_id) -> None:
+def feed_undelete(ctx: Context, feed_ref, namespace, feed_id) -> None:
     """Restore a deleted feed."""
-    f = ctx.client().call("UndeleteFeed", pb.UndeleteFeedRequest(feed=ctx.feed_ref(name, namespace), id=feed_id))
+    f = ctx.client().call(
+        "UndeleteFeed", pb.UndeleteFeedRequest(feed=ctx.writable_ref(feed_ref, namespace), id=feed_id)
+    )
     click.echo(f"Restored {f.namespace}/{f.name}.")
 
 
 @feed.command("errors")
-@click.argument("name")
+@click.argument("feed_ref", metavar="FEED")
 @namespace_option
 @click.option("--limit", default=20, show_default=True, help="Most recent first; at most 1,000.")
 @pass_context
-def feed_errors(ctx: Context, name, namespace, limit) -> None:
+def feed_errors(ctx: Context, feed_ref, namespace, limit) -> None:
     """Show the most recently rejected events and why."""
     rejections = ctx.client().call(
-        "ListRejections", pb.ListRejectionsRequest(feed=ctx.feed_ref(name, namespace), limit=limit)
+        "ListRejections", pb.ListRejectionsRequest(feed=ctx.feed_ref(feed_ref, namespace), limit=limit)
     ).rejections
     if not rejections:
         click.echo("(no rejected events)")
@@ -304,18 +407,32 @@ def _example_event(f: pb.Feed) -> dict:
     return example
 
 
-def _indent(detail: str) -> str:
-    """The server's details can span lines (e.g. a JSON error with a caret); keep them under their event."""
-    return "\n    ".join(line.expandtabs(4) for line in detail.strip().splitlines() if line.strip())
+def _indent(detail: str, by: int = 4) -> str:
+    """Text that may span lines (e.g. a JSON error with a caret), indented to stay under its label."""
+    return ("\n" + " " * by).join(line.expandtabs(4) for line in detail.strip().splitlines() if line.strip())
 
 
-def _print_feed(f: pb.Feed) -> None:
+def _print_feed(ctx: Context, f: pb.Feed) -> None:
+    ours = f.organization in ("", ctx.me().organization)
     rows = [
         ("feed", f"{f.organization}/{f.namespace}/{f.name}"),
+        ("access", "your organization" if not f.public else "public" if ours else f"public, read-only ({f.organization})"),
+    ]
+    rows += [(label, value) for label, value in (
+        ("description", f.description),
+        ("source", f.source_url),
+        ("licence", f.licence),
+        ("attribution", f.attribution),
+    ) if value]
+    rows += [
         ("id", f.id),
         ("key field", f.key_field if f.HasField("key_field") and f.key_field else "(none: one ordered stream)"),
         ("time field", "(none: event time = arrival)" if f.arrival_time else f.time_field),
         ("time unit", short_enum(pb.TimeUnit, f.time_unit)),
+    ]
+    if f.publication_time_field:
+        rows.append(("published", f"field {f.publication_time_field} (as-of --as-of-basis published)"))
+    rows += [
         ("ack mode", short_enum(pb.AckMode, f.ack_mode)),
         ("partitions", str(f.partitions)),
         ("created", format_ns(f.created_at_ns)),
@@ -331,7 +448,7 @@ def _print_feed(f: pb.Feed) -> None:
         )
     )
     for name, value in rows:
-        click.echo(f"{name + ':':<13}{value}")
+        click.echo(f"{name + ':':<13}{_indent(value, 13)}")
     r = s.rejections
     if r.last_hour:
         reasons = ", ".join(f"{k} ×{v}" for k, v in sorted(r.last_hour_by_reason.items(), key=lambda kv: -kv[1]))
@@ -352,7 +469,7 @@ def _print_feed(f: pb.Feed) -> None:
 
 
 @feed.command("push")
-@click.argument("name")
+@click.argument("name", metavar="FEED")
 @namespace_option
 @click.option("-d", "--data", multiple=True, help="An event (JSON object) or a JSON array of them. Repeatable.")
 @click.option(
@@ -393,7 +510,7 @@ def feed_push(ctx: Context, name, namespace, data, files, batch_size, quiet) -> 
     if not items:
         raise click.ClickException("no events to send")
 
-    result = pusher.send(ctx.client(), ctx.feed_ref(name, namespace), items, batch_size=max(batch_size, 1))
+    result = pusher.send(ctx.client(), ctx.writable_ref(name, namespace), items, batch_size=max(batch_size, 1))
     for item, rejection in result.rejected:
         click.secho(
             f"REJECTED {item.source}: {short_enum(pb.RejectionReason, rejection.reason)}: {_indent(rejection.detail)}",
@@ -414,12 +531,16 @@ def feed_push(ctx: Context, name, namespace, data, files, batch_size, quiet) -> 
 
 
 @feed.command("query")
-@click.argument("name")
+@click.argument("name", metavar="FEED")
 @namespace_option
 @click.option("--since", help="Events from this long ago, e.g. 15m, 1h, 7d.")
 @click.option("--start", help="Inclusive start of event time (RFC 3339 or integer ns).")
 @click.option("--end", help="Exclusive end of event time.")
 @click.option("--as-of", help="Only what had been received by then: replays what was known at that moment.")
+@click.option(
+    "--as-of-basis", type=click.Choice(list(AS_OF_BASES)), default="received", show_default=True,
+    help="With --as-of: what Isodrome had received, or what the source had published, by then.",
+)
 @where_option
 @column_option
 @click.option("--limit", default=100, show_default=True, help="Most rows to return; 0 for all.")
@@ -431,8 +552,8 @@ def feed_push(ctx: Context, name, namespace, data, files, batch_size, quiet) -> 
 @format_option
 @pass_context
 def feed_query(
-    ctx: Context, name, namespace, since, start, end, as_of, filters, columns, limit, payload, count,
-    at_position, system, dedupe, keep, fmt,
+    ctx: Context, name, namespace, since, start, end, as_of, as_of_basis, filters, columns, limit, payload, count,
+    at_position, system, dedupe, keep, dedupe_order, fmt,
 ) -> None:
     """Read a feed's events by event time, filters and as-of."""
     if since and start:
@@ -451,9 +572,10 @@ def feed_query(
         request.end_event_time_ns = _value(parse_time, end, "--end")
     if as_of:
         request.as_of_ns = _value(parse_time, as_of, "--as-of")
+        request.as_of_basis = AS_OF_BASES[as_of_basis]
     if at_position:
         request.at_position.CopyFrom(_value(parse_position, at_position, "--at-position"))
-    if d := _dedupe(dedupe, keep):
+    if d := _dedupe(dedupe, keep, dedupe_order):
         request.dedupe.CopyFrom(d)
     if count:
         request.columns[:] = request.columns or ["_offset"]  # no data needed, just rows
@@ -480,6 +602,8 @@ def feed_query(
         click.echo(rows)
         return
     printer.finish("(no events)")
+    if rows:
+        _attribution(ctx, request.feed)
     if limit and rows > limit:
         click.echo(f"(first {limit} events; --limit to see more, --limit 0 for all)", err=True)
     if position is not None and fmt == "table":
@@ -487,7 +611,7 @@ def feed_query(
 
 
 @feed.command("tail")
-@click.argument("name")
+@click.argument("name", metavar="FEED")
 @namespace_option
 @click.option("-l", "--last", default=10, show_default=True, help="Start with the last N events.")
 @click.option("--from-beginning", is_flag=True, help="Start with the first event.")
@@ -501,7 +625,7 @@ def feed_query(
 @pass_context
 def feed_tail(
     ctx: Context, name, namespace, last, from_beginning, from_time, speed, no_follow, filters, columns,
-    dedupe, keep, fmt,
+    dedupe, keep, dedupe_order, fmt,
 ) -> None:
     """Print recent events, then new ones as they arrive (Ctrl-C to stop)."""
     columns = list(columns) or ["_event_time", "_key", "_payload"]
@@ -522,9 +646,10 @@ def feed_tail(
         request.from_now = True
     if speed is not None:
         request.speed = speed
-    if d := _dedupe(dedupe, keep):
+    if d := _dedupe(dedupe, keep, dedupe_order):
         request.dedupe.CopyFrom(d)
 
+    _attribution(ctx, request.feed)
     printer = output.Printer(fmt)
     stream = ctx.client().stream("Subscribe", request)
     try:
@@ -542,7 +667,7 @@ def feed_tail(
 
 
 @feed.command("latest")
-@click.argument("name")
+@click.argument("name", metavar="FEED")
 @namespace_option
 @click.option("-k", "--key", "keys", multiple=True, help="Only this key. Repeatable.")
 @column_option
@@ -550,9 +675,13 @@ def feed_tail(
 @pass_context
 def feed_latest(ctx: Context, name, namespace, keys, columns, fmt) -> None:
     """Show the newest event per key."""
+    response_ref = ctx.feed_ref(name, namespace)
     response = ctx.client().call(
-        "Latest", pb.LatestRequest(feed=ctx.feed_ref(name, namespace), keys=list(keys), columns=list(columns))
+        "Latest", pb.LatestRequest(feed=response_ref, keys=list(keys), columns=list(columns))
     )
     printer = output.Printer(fmt)
-    printer.table(output.decode(response.batch.ipc))
+    table = output.decode(response.batch.ipc)
+    printer.table(table)
     printer.finish("(no events)")
+    if table is not None and table.num_rows:
+        _attribution(ctx, response_ref)

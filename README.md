@@ -33,13 +33,31 @@ the same file twice is recognised and not written twice (within the server's 15-
 |---|---|
 | `iso login` / `logout` | sign in with the browser (or `--api-key`); logout revokes the key |
 | `iso whoami`, `iso server`, `iso --version` | your identity; the server's version and limits |
-| `iso namespace create` / `list` / `delete` / `use` | namespaces; `use` sets the one commands act on |
-| `iso key create` / `list` / `revoke` | API keys for scripts and services (personal by default); your sessions |
-| `iso feed create` / `list` / `show` / `describe` / `update` | feeds; `describe` shows how to send and query |
+| `iso namespace create` / `list` / `update` / `delete` / `use` | namespaces; `update --public` publishes one to every organization; `use` sets the one commands act on |
+| `iso feed create` / `list` / `show` / `describe` / `update` | feeds (`list`: yours in every namespace, and other organizations' public ones); `describe` shows how to send and query |
 | `iso feed delete` / `undelete` / `errors` | soft deletion (7 days to undo); recent rejections |
 | `iso feed push` / `query` / `tail` / `latest` | send and read events; `-o table\|json\|csv` |
+| `iso key create` / `list` / `revoke` | API keys (personal by default, or for a service account); your sessions |
+| `iso service-account create` / `list` / `delete` | identities for software (CI, services), with keys of their own |
+| `iso connector templates`, `iso connection create` / `list` / `show` / `pause` / `resume` / `delete` | Isodrome-run downloaders that fill feeds from outside sources |
 
 `iso <command> --help` describes each one.
+
+## Feeds from other organizations
+
+A feed is named `FEED` (in the namespace in use), `NAMESPACE/FEED`, or
+`ORGANIZATION/NAMESPACE/FEED`. The last form reaches another organization's **public** feeds,
+such as Isodrome's open data, which any signed-in user can read but only their publisher can
+change:
+
+```bash
+iso feed list                                              # yours, then public ones from others
+iso feed show isodrome/public/met_eireann_point_forecast   # with its source, licence and attribution
+iso feed latest isodrome/public/met_eireann_point_forecast -c location -c temperature.value
+iso namespace use isodrome/public                          # then refer to its feeds by name alone
+```
+
+When a feed's source asks for credit, `iso` prints the attribution (on stderr) with the data.
 
 ## Configuration and profiles
 
@@ -75,6 +93,8 @@ scripts/sync_proto.sh --check     # what CI runs: fails if either is out of date
 
 ```bash
 docker compose -f tests/e2e/docker-compose.yml up -d --wait   # ISODROME_SERVER_IMAGE=… for another image
+export ISODROME_E2E_OTHER_KEY=$(docker compose -f tests/e2e/docker-compose.yml exec -T isodrome-server \
+  isodrome-server create-organization other | awk '/admin key:/ {print $3}')   # for the public-feed test
 ISODROME_E2E_ENDPOINT=http://localhost:7470 pytest -m e2e tests/e2e
 ```
 

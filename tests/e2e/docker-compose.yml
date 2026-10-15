@@ -3,6 +3,8 @@
 #
 #   ISODROME_SERVER_IMAGE=ghcr.io/isodrome-ai/isodrome-server:latest \
 #     docker compose -f tests/e2e/docker-compose.yml up -d --wait
+#   export ISODROME_E2E_OTHER_KEY=$(docker compose -f tests/e2e/docker-compose.yml exec -T \
+#     isodrome-server isodrome-server create-organization other | awk '/admin key:/ {print $3}')
 #   ISODROME_E2E_ENDPOINT=http://localhost:7470 pytest -m e2e
 
 name: isodrome-e2e
@@ -68,6 +70,8 @@ services:
       ISODROME_S3_SECRET_ACCESS_KEY: isodrome-dev-secret
       ISODROME_S3_ALLOW_HTTP: "true"
       ISODROME_FLUSH_INTERVAL: 1s
+      # `local` may publish namespaces; the tests read them from a second organization.
+      ISODROME_PUBLIC_ORGANIZATIONS: local
       # DEV ONLY: the publicly known admin key of the local stack.
       ISODROME_BOOTSTRAP_KEY: iso_devlocal_DEVONLYlocalAdminKeyNeverUseInProduction0
     ports:

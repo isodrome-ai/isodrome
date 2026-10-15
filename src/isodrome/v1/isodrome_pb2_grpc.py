@@ -54,6 +54,11 @@ class IsodromeStub(object):
                 request_serializer=isodrome_dot_v1_dot_isodrome__pb2.ListNamespacesRequest.SerializeToString,
                 response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.ListNamespacesResponse.FromString,
                 _registered_method=True)
+        self.UpdateNamespace = channel.unary_unary(
+                '/isodrome.v1.Isodrome/UpdateNamespace',
+                request_serializer=isodrome_dot_v1_dot_isodrome__pb2.UpdateNamespaceRequest.SerializeToString,
+                response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.Namespace.FromString,
+                _registered_method=True)
         self.DeleteNamespace = channel.unary_unary(
                 '/isodrome.v1.Isodrome/DeleteNamespace',
                 request_serializer=isodrome_dot_v1_dot_isodrome__pb2.DeleteNamespaceRequest.SerializeToString,
@@ -73,6 +78,21 @@ class IsodromeStub(object):
                 '/isodrome.v1.Isodrome/RevokeApiKey',
                 request_serializer=isodrome_dot_v1_dot_isodrome__pb2.RevokeApiKeyRequest.SerializeToString,
                 response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.ApiKey.FromString,
+                _registered_method=True)
+        self.CreateServiceAccount = channel.unary_unary(
+                '/isodrome.v1.Isodrome/CreateServiceAccount',
+                request_serializer=isodrome_dot_v1_dot_isodrome__pb2.CreateServiceAccountRequest.SerializeToString,
+                response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.ServiceAccount.FromString,
+                _registered_method=True)
+        self.ListServiceAccounts = channel.unary_unary(
+                '/isodrome.v1.Isodrome/ListServiceAccounts',
+                request_serializer=isodrome_dot_v1_dot_isodrome__pb2.ListServiceAccountsRequest.SerializeToString,
+                response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.ListServiceAccountsResponse.FromString,
+                _registered_method=True)
+        self.DeleteServiceAccount = channel.unary_unary(
+                '/isodrome.v1.Isodrome/DeleteServiceAccount',
+                request_serializer=isodrome_dot_v1_dot_isodrome__pb2.DeleteServiceAccountRequest.SerializeToString,
+                response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.DeleteServiceAccountResponse.FromString,
                 _registered_method=True)
         self.CreateFeed = channel.unary_unary(
                 '/isodrome.v1.Isodrome/CreateFeed',
@@ -108,6 +128,41 @@ class IsodromeStub(object):
                 '/isodrome.v1.Isodrome/ListRejections',
                 request_serializer=isodrome_dot_v1_dot_isodrome__pb2.ListRejectionsRequest.SerializeToString,
                 response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.ListRejectionsResponse.FromString,
+                _registered_method=True)
+        self.ListConnectorTemplates = channel.unary_unary(
+                '/isodrome.v1.Isodrome/ListConnectorTemplates',
+                request_serializer=isodrome_dot_v1_dot_isodrome__pb2.ListConnectorTemplatesRequest.SerializeToString,
+                response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.ListConnectorTemplatesResponse.FromString,
+                _registered_method=True)
+        self.CreateConnection = channel.unary_unary(
+                '/isodrome.v1.Isodrome/CreateConnection',
+                request_serializer=isodrome_dot_v1_dot_isodrome__pb2.CreateConnectionRequest.SerializeToString,
+                response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.Connection.FromString,
+                _registered_method=True)
+        self.ListConnections = channel.unary_unary(
+                '/isodrome.v1.Isodrome/ListConnections',
+                request_serializer=isodrome_dot_v1_dot_isodrome__pb2.ListConnectionsRequest.SerializeToString,
+                response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.ListConnectionsResponse.FromString,
+                _registered_method=True)
+        self.GetConnection = channel.unary_unary(
+                '/isodrome.v1.Isodrome/GetConnection',
+                request_serializer=isodrome_dot_v1_dot_isodrome__pb2.GetConnectionRequest.SerializeToString,
+                response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.Connection.FromString,
+                _registered_method=True)
+        self.PauseConnection = channel.unary_unary(
+                '/isodrome.v1.Isodrome/PauseConnection',
+                request_serializer=isodrome_dot_v1_dot_isodrome__pb2.PauseConnectionRequest.SerializeToString,
+                response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.Connection.FromString,
+                _registered_method=True)
+        self.ResumeConnection = channel.unary_unary(
+                '/isodrome.v1.Isodrome/ResumeConnection',
+                request_serializer=isodrome_dot_v1_dot_isodrome__pb2.ResumeConnectionRequest.SerializeToString,
+                response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.Connection.FromString,
+                _registered_method=True)
+        self.DeleteConnection = channel.unary_unary(
+                '/isodrome.v1.Isodrome/DeleteConnection',
+                request_serializer=isodrome_dot_v1_dot_isodrome__pb2.DeleteConnectionRequest.SerializeToString,
+                response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.DeleteConnectionResponse.FromString,
                 _registered_method=True)
         self.Send = channel.stream_stream(
                 '/isodrome.v1.Isodrome/Send',
@@ -160,6 +215,14 @@ class IsodromeServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def UpdateNamespace(self, request, context):
+        """Make a namespace public (readable from every organization) or private. ADMIN only, and
+        only for organizations the server allows to publish (ISODROME_PUBLIC_ORGANIZATIONS).
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def DeleteNamespace(self, request, context):
         """Only an empty namespace (no feeds) that no active key uses as its default.
         ADMIN only
@@ -184,6 +247,26 @@ class IsodromeServicer(object):
 
     def RevokeApiKey(self, request, context):
         """ADMIN: any; others: their own, or the one in use (logout)
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CreateServiceAccount(self, request, context):
+        """Service accounts: identities that cannot sign in and hold API keys (connectors, CI). ADMIN.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListServiceAccounts(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def DeleteServiceAccount(self, request, context):
+        """Revokes all its credentials at once.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -237,6 +320,53 @@ class IsodromeServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ListConnectorTemplates(self, request, context):
+        """Connectors: Isodrome-run downloaders that fill feeds from outside sources. A template is a
+        kind of connector (e.g. "met_eireann.point_forecast"); a connection is one running instance
+        of a template in a namespace, with its options. Creating a connection creates its feeds and
+        a service account it writes as; workers then run it. Viewing: READER; changing: ADMIN.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CreateConnection(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListConnections(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetConnection(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def PauseConnection(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ResumeConnection(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def DeleteConnection(self, request, context):
+        """Stops it and deletes its service account. Its feeds and their data stay.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def Send(self, request_iterator, context):
         """Data
         """
@@ -285,6 +415,11 @@ def add_IsodromeServicer_to_server(servicer, server):
                     request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.ListNamespacesRequest.FromString,
                     response_serializer=isodrome_dot_v1_dot_isodrome__pb2.ListNamespacesResponse.SerializeToString,
             ),
+            'UpdateNamespace': grpc.unary_unary_rpc_method_handler(
+                    servicer.UpdateNamespace,
+                    request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.UpdateNamespaceRequest.FromString,
+                    response_serializer=isodrome_dot_v1_dot_isodrome__pb2.Namespace.SerializeToString,
+            ),
             'DeleteNamespace': grpc.unary_unary_rpc_method_handler(
                     servicer.DeleteNamespace,
                     request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.DeleteNamespaceRequest.FromString,
@@ -304,6 +439,21 @@ def add_IsodromeServicer_to_server(servicer, server):
                     servicer.RevokeApiKey,
                     request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.RevokeApiKeyRequest.FromString,
                     response_serializer=isodrome_dot_v1_dot_isodrome__pb2.ApiKey.SerializeToString,
+            ),
+            'CreateServiceAccount': grpc.unary_unary_rpc_method_handler(
+                    servicer.CreateServiceAccount,
+                    request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.CreateServiceAccountRequest.FromString,
+                    response_serializer=isodrome_dot_v1_dot_isodrome__pb2.ServiceAccount.SerializeToString,
+            ),
+            'ListServiceAccounts': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListServiceAccounts,
+                    request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.ListServiceAccountsRequest.FromString,
+                    response_serializer=isodrome_dot_v1_dot_isodrome__pb2.ListServiceAccountsResponse.SerializeToString,
+            ),
+            'DeleteServiceAccount': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteServiceAccount,
+                    request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.DeleteServiceAccountRequest.FromString,
+                    response_serializer=isodrome_dot_v1_dot_isodrome__pb2.DeleteServiceAccountResponse.SerializeToString,
             ),
             'CreateFeed': grpc.unary_unary_rpc_method_handler(
                     servicer.CreateFeed,
@@ -339,6 +489,41 @@ def add_IsodromeServicer_to_server(servicer, server):
                     servicer.ListRejections,
                     request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.ListRejectionsRequest.FromString,
                     response_serializer=isodrome_dot_v1_dot_isodrome__pb2.ListRejectionsResponse.SerializeToString,
+            ),
+            'ListConnectorTemplates': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListConnectorTemplates,
+                    request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.ListConnectorTemplatesRequest.FromString,
+                    response_serializer=isodrome_dot_v1_dot_isodrome__pb2.ListConnectorTemplatesResponse.SerializeToString,
+            ),
+            'CreateConnection': grpc.unary_unary_rpc_method_handler(
+                    servicer.CreateConnection,
+                    request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.CreateConnectionRequest.FromString,
+                    response_serializer=isodrome_dot_v1_dot_isodrome__pb2.Connection.SerializeToString,
+            ),
+            'ListConnections': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListConnections,
+                    request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.ListConnectionsRequest.FromString,
+                    response_serializer=isodrome_dot_v1_dot_isodrome__pb2.ListConnectionsResponse.SerializeToString,
+            ),
+            'GetConnection': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetConnection,
+                    request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.GetConnectionRequest.FromString,
+                    response_serializer=isodrome_dot_v1_dot_isodrome__pb2.Connection.SerializeToString,
+            ),
+            'PauseConnection': grpc.unary_unary_rpc_method_handler(
+                    servicer.PauseConnection,
+                    request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.PauseConnectionRequest.FromString,
+                    response_serializer=isodrome_dot_v1_dot_isodrome__pb2.Connection.SerializeToString,
+            ),
+            'ResumeConnection': grpc.unary_unary_rpc_method_handler(
+                    servicer.ResumeConnection,
+                    request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.ResumeConnectionRequest.FromString,
+                    response_serializer=isodrome_dot_v1_dot_isodrome__pb2.Connection.SerializeToString,
+            ),
+            'DeleteConnection': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteConnection,
+                    request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.DeleteConnectionRequest.FromString,
+                    response_serializer=isodrome_dot_v1_dot_isodrome__pb2.DeleteConnectionResponse.SerializeToString,
             ),
             'Send': grpc.stream_stream_rpc_method_handler(
                     servicer.Send,
@@ -480,6 +665,33 @@ class Isodrome(object):
             _registered_method=True)
 
     @staticmethod
+    def UpdateNamespace(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/isodrome.v1.Isodrome/UpdateNamespace',
+            isodrome_dot_v1_dot_isodrome__pb2.UpdateNamespaceRequest.SerializeToString,
+            isodrome_dot_v1_dot_isodrome__pb2.Namespace.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
     def DeleteNamespace(request,
             target,
             options=(),
@@ -577,6 +789,87 @@ class Isodrome(object):
             '/isodrome.v1.Isodrome/RevokeApiKey',
             isodrome_dot_v1_dot_isodrome__pb2.RevokeApiKeyRequest.SerializeToString,
             isodrome_dot_v1_dot_isodrome__pb2.ApiKey.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CreateServiceAccount(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/isodrome.v1.Isodrome/CreateServiceAccount',
+            isodrome_dot_v1_dot_isodrome__pb2.CreateServiceAccountRequest.SerializeToString,
+            isodrome_dot_v1_dot_isodrome__pb2.ServiceAccount.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListServiceAccounts(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/isodrome.v1.Isodrome/ListServiceAccounts',
+            isodrome_dot_v1_dot_isodrome__pb2.ListServiceAccountsRequest.SerializeToString,
+            isodrome_dot_v1_dot_isodrome__pb2.ListServiceAccountsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DeleteServiceAccount(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/isodrome.v1.Isodrome/DeleteServiceAccount',
+            isodrome_dot_v1_dot_isodrome__pb2.DeleteServiceAccountRequest.SerializeToString,
+            isodrome_dot_v1_dot_isodrome__pb2.DeleteServiceAccountResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -766,6 +1059,195 @@ class Isodrome(object):
             '/isodrome.v1.Isodrome/ListRejections',
             isodrome_dot_v1_dot_isodrome__pb2.ListRejectionsRequest.SerializeToString,
             isodrome_dot_v1_dot_isodrome__pb2.ListRejectionsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListConnectorTemplates(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/isodrome.v1.Isodrome/ListConnectorTemplates',
+            isodrome_dot_v1_dot_isodrome__pb2.ListConnectorTemplatesRequest.SerializeToString,
+            isodrome_dot_v1_dot_isodrome__pb2.ListConnectorTemplatesResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CreateConnection(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/isodrome.v1.Isodrome/CreateConnection',
+            isodrome_dot_v1_dot_isodrome__pb2.CreateConnectionRequest.SerializeToString,
+            isodrome_dot_v1_dot_isodrome__pb2.Connection.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListConnections(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/isodrome.v1.Isodrome/ListConnections',
+            isodrome_dot_v1_dot_isodrome__pb2.ListConnectionsRequest.SerializeToString,
+            isodrome_dot_v1_dot_isodrome__pb2.ListConnectionsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetConnection(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/isodrome.v1.Isodrome/GetConnection',
+            isodrome_dot_v1_dot_isodrome__pb2.GetConnectionRequest.SerializeToString,
+            isodrome_dot_v1_dot_isodrome__pb2.Connection.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def PauseConnection(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/isodrome.v1.Isodrome/PauseConnection',
+            isodrome_dot_v1_dot_isodrome__pb2.PauseConnectionRequest.SerializeToString,
+            isodrome_dot_v1_dot_isodrome__pb2.Connection.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ResumeConnection(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/isodrome.v1.Isodrome/ResumeConnection',
+            isodrome_dot_v1_dot_isodrome__pb2.ResumeConnectionRequest.SerializeToString,
+            isodrome_dot_v1_dot_isodrome__pb2.Connection.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DeleteConnection(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/isodrome.v1.Isodrome/DeleteConnection',
+            isodrome_dot_v1_dot_isodrome__pb2.DeleteConnectionRequest.SerializeToString,
+            isodrome_dot_v1_dot_isodrome__pb2.DeleteConnectionResponse.FromString,
             options,
             channel_credentials,
             insecure,

@@ -13,9 +13,10 @@ import grpc  # noqa: E402
 
 from isodrome import __version__
 from isodrome.cli.account import account_commands
+from isodrome.cli.connector import connection, connector
 from isodrome.cli.context import Context, Group, warn_on_version_mismatch
 from isodrome.cli.feed import feed
-from isodrome.cli.tenancy import key, namespace
+from isodrome.cli.tenancy import key, namespace, service_account
 from isodrome.client import API_VERSION, Client
 from isodrome.config import Config
 
@@ -61,8 +62,11 @@ def cli(ctx: click.Context, profile: str | None, endpoint: str | None, api_key: 
 for command in account_commands:
     cli.add_command(command)
 cli.add_command(namespace)
-cli.add_command(key)
 cli.add_command(feed)
+cli.add_command(key)
+cli.add_command(service_account)
+cli.add_command(connector)
+cli.add_command(connection)
 
 
 def main() -> None:

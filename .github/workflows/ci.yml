@@ -73,6 +73,13 @@ jobs:
       - if: steps.image.outputs.available == 'true'
         run: docker compose -f tests/e2e/docker-compose.yml up -d --wait --wait-timeout 300
       - if: steps.image.outputs.available == 'true'
+        name: A second organization, to read the first one's public feeds
+        run: |
+          key=$(docker compose -f tests/e2e/docker-compose.yml exec -T isodrome-server \
+            isodrome-server create-organization other | awk '/admin key:/ {print $3}')
+          echo "::add-mask::$key"
+          echo "ISODROME_E2E_OTHER_KEY=$key" >> "$GITHUB_ENV"
+      - if: steps.image.outputs.available == 'true'
         run: ISODROME_E2E_ENDPOINT=http://localhost:7470 pytest -q -m e2e tests/e2e
       - if: failure() && steps.image.outputs.available == 'true'
         run: docker compose -f tests/e2e/docker-compose.yml logs isodrome-server | tail -200

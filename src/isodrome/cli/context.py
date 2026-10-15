@@ -25,6 +25,7 @@ class Context:
         self.endpoint_override = endpoint
         self.api_key_override = api_key
         self._client: Client | None = None
+        self._me: pb.WhoAmIResponse | None = None
 
     @property
     def profile(self) -> Profile:
@@ -51,13 +52,55 @@ class Context:
                 raise click.ClickException(str(e)) from None
         return self._client
 
-    def namespace(self, explicit: str | None) -> str:
-        """The namespace a command acts on: `--namespace`, else `iso namespace use`'s choice, else
-        "" (the API key's default namespace)."""
-        return explicit or self.profile.namespace or ""
+    def me(self) -> pb.WhoAmIResponse:
+        if self._me is None:
+            self._me = self.client().call("WhoAmI", pb.WhoAmIRequest())
+        return self._me
 
-    def feed_ref(self, name: str, namespace: str | None) -> pb.FeedRef:
-        return pb.FeedRef(namespace=self.namespace(namespace), name=name)
+    def scope(self, explicit: str | None) -> tuple[str, str]:
+        """(organization, namespace) a command acts on: `--namespace`, else `iso namespace use`'s
+        choice, else ("", "") (your organization; the credential's default namespace). Either may
+        be `org/namespace`: another organization's public namespace."""
+        text = explicit or self.profile.namespace or ""
+        organization, _, namespace = text.rpartition("/")
+        return organization, namespace
+
+    def namespace(self, explicit: str | None) -> str:
+        """The namespace in your own organization a command acts on ("": the default one)."""
+        organization, namespace = self.scope(explicit)
+        return "" if organization else namespace
+
+    def feed_ref(self, ref: str, namespace: str | None) -> pb.FeedRef:
+        """`feed`, `namespace/feed` or `organization/namespace/feed` → a FeedRef."""
+        parts = ref.split("/")
+        if len(parts) > 3 or not all(parts):
+            raise click.BadParameter(f"{ref!r}: expected FEED, NAMESPACE/FEED or ORGANIZATION/NAMESPACE/FEED")
+        if len(parts) > 1 and namespace:
+            raise click.UsageError(f"{ref!r} names its namespace already; leave out --namespace")
+        if len(parts) == 3:
+            return pb.FeedRef(organization=parts[0], namespace=parts[1], name=parts[2])
+        if len(parts) == 2:
+            return pb.FeedRef(namespace=parts[0], name=parts[1])
+        organization, ns = self.scope(namespace)
+        return pb.FeedRef(organization=organization, namespace=ns, name=ref)
+
+    def writable_ref(self, ref: str, namespace: str | None) -> pb.FeedRef:
+        """A FeedRef for a change, which only your own organization's feeds allow."""
+        feed = self.feed_ref(ref, namespace)
+        if feed.organization:
+            if feed.organization != self.me().organization:
+                raise click.ClickException(
+                    f"{feed.organization}/{feed.namespace}/{feed.name} belongs to another organization: "
+                    "its public feeds can be read, but not changed"
+                )
+            feed.organization = ""
+        return feed
+
+    def display_ref(self, organization: str, namespace: str, name: str = "") -> str:
+        """How to refer to a namespace or feed from here: `namespace[/feed]` in your
+        organization, `organization/namespace[/feed]` in another."""
+        prefix = "" if organization in ("", self.me().organization) else f"{organization}/"
+        return prefix + namespace + (f"/{name}" if name else "")
 
     def save(self) -> None:
         self.config.save()
@@ -105,5 +148,6 @@ class Group(click.Group):
 pass_context = click.make_pass_decorator(Context)
 
 namespace_option = click.option(
-    "-n", "--namespace", default=None, help="Namespace (default: `iso namespace use`, else your key's default)."
+    "-n", "--namespace", default=None,
+    help="Namespace (default: `iso namespace use`, else your key's default); ORGANIZATION/NAME for another's public one.",
 )
