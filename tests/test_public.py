@@ -23,7 +23,7 @@ def test_feed_list_spans_namespaces_and_organizations(iso, fake):
     result = iso("feed", "list")
     assert result.exit_code == 0, result.output
     lines = result.stdout.splitlines()
-    assert lines[0].split()[:3] == ["feed", "access", "key"]
+    assert lines[0].split()[:3] == ["feed", "access", "key"] and "last received" in lines[0]
     assert any(line.startswith("default/trades ") and " org " in line for line in lines)
     assert any(line.startswith("markets/quotes ") and " public " in line for line in lines)
     assert any(line.startswith("isodrome/public/forecasts ") and "public, read-only" in line for line in lines)
@@ -131,3 +131,22 @@ def test_connectors(iso, fake):
     created = iso("connection", "create", "dublin", "--template", "met_eireann.point_forecast", "--paused")
     assert created.exit_code == 0 and "service account connection-dublin" in created.output
     assert "dublin" in iso("connection", "list").output
+
+
+def test_connection_credentials_come_from_a_file(iso, fake, tmp_path):
+    creds = tmp_path / "creds.json"
+    creds.write_text('{"api_key": "k", "api_secret": "s"}')
+    created = iso("connection", "create", "ex", "--template", "met_eireann.point_forecast", "--credentials", str(creds))
+    assert created.exit_code == 0 and "credentials: api_key, api_secret" in created.output
+    assert iso("connection", "credentials", "ex", "--from", "-", input='{"api_key": "k2"}').exit_code == 0
+    assert list(fake.connections[0].credential_fields) == ["api_key"]
+    assert iso("connection", "credentials", "ex", "--from", "-", input='{"n": 1}').exit_code == 2
+
+
+def test_query_as_of_lag_needs_the_server(iso, fake):
+    _setup(iso, fake)
+    refused = iso("feed", "query", "trades", "--as-of-lag", "24h")
+    assert refused.exit_code == 1 and "does not support --as-of-lag" in refused.output
+    fake.capabilities = ["read.as_of_lag"]
+    assert iso("feed", "query", "trades", "--as-of-lag", "24h", "--as-of-basis", "published").exit_code == 0
+    assert fake.last_read.as_of_lag_ns == 24 * 3600 * 10**9 and fake.last_read.as_of_basis == pb.AS_OF_BASIS_PUBLISHED

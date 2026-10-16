@@ -159,6 +159,11 @@ class IsodromeStub(object):
                 request_serializer=isodrome_dot_v1_dot_isodrome__pb2.ResumeConnectionRequest.SerializeToString,
                 response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.Connection.FromString,
                 _registered_method=True)
+        self.SetConnectionCredentials = channel.unary_unary(
+                '/isodrome.v1.Isodrome/SetConnectionCredentials',
+                request_serializer=isodrome_dot_v1_dot_isodrome__pb2.SetConnectionCredentialsRequest.SerializeToString,
+                response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.Connection.FromString,
+                _registered_method=True)
         self.DeleteConnection = channel.unary_unary(
                 '/isodrome.v1.Isodrome/DeleteConnection',
                 request_serializer=isodrome_dot_v1_dot_isodrome__pb2.DeleteConnectionRequest.SerializeToString,
@@ -183,6 +188,11 @@ class IsodromeStub(object):
                 '/isodrome.v1.Isodrome/Subscribe',
                 request_serializer=isodrome_dot_v1_dot_isodrome__pb2.SubscribeRequest.SerializeToString,
                 response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.SubscribeResponse.FromString,
+                _registered_method=True)
+        self.Lookup = channel.unary_stream(
+                '/isodrome.v1.Isodrome/Lookup',
+                request_serializer=isodrome_dot_v1_dot_isodrome__pb2.LookupRequest.SerializeToString,
+                response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.LookupResponse.FromString,
                 _registered_method=True)
 
 
@@ -360,6 +370,14 @@ class IsodromeServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def SetConnectionCredentials(self, request, context):
+        """Replaces a connection's credentials (for templates that need the owner's own account with
+        the source). Write-only: credentials are never returned. The connection restarts with them.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def DeleteConnection(self, request, context):
         """Stops it and deletes its service account. Its feeds and their data stay.
         """
@@ -388,6 +406,13 @@ class IsodromeServicer(object):
 
     def Subscribe(self, request, context):
         """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Lookup(self, request, context):
+        """Point-in-time values for (key, time) probes: an as-of join against the client's rows.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -520,6 +545,11 @@ def add_IsodromeServicer_to_server(servicer, server):
                     request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.ResumeConnectionRequest.FromString,
                     response_serializer=isodrome_dot_v1_dot_isodrome__pb2.Connection.SerializeToString,
             ),
+            'SetConnectionCredentials': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetConnectionCredentials,
+                    request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.SetConnectionCredentialsRequest.FromString,
+                    response_serializer=isodrome_dot_v1_dot_isodrome__pb2.Connection.SerializeToString,
+            ),
             'DeleteConnection': grpc.unary_unary_rpc_method_handler(
                     servicer.DeleteConnection,
                     request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.DeleteConnectionRequest.FromString,
@@ -544,6 +574,11 @@ def add_IsodromeServicer_to_server(servicer, server):
                     servicer.Subscribe,
                     request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.SubscribeRequest.FromString,
                     response_serializer=isodrome_dot_v1_dot_isodrome__pb2.SubscribeResponse.SerializeToString,
+            ),
+            'Lookup': grpc.unary_stream_rpc_method_handler(
+                    servicer.Lookup,
+                    request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.LookupRequest.FromString,
+                    response_serializer=isodrome_dot_v1_dot_isodrome__pb2.LookupResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -1232,6 +1267,33 @@ class Isodrome(object):
             _registered_method=True)
 
     @staticmethod
+    def SetConnectionCredentials(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/isodrome.v1.Isodrome/SetConnectionCredentials',
+            isodrome_dot_v1_dot_isodrome__pb2.SetConnectionCredentialsRequest.SerializeToString,
+            isodrome_dot_v1_dot_isodrome__pb2.Connection.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
     def DeleteConnection(request,
             target,
             options=(),
@@ -1356,6 +1418,33 @@ class Isodrome(object):
             '/isodrome.v1.Isodrome/Subscribe',
             isodrome_dot_v1_dot_isodrome__pb2.SubscribeRequest.SerializeToString,
             isodrome_dot_v1_dot_isodrome__pb2.SubscribeResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Lookup(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_stream(
+            request,
+            target,
+            '/isodrome.v1.Isodrome/Lookup',
+            isodrome_dot_v1_dot_isodrome__pb2.LookupRequest.SerializeToString,
+            isodrome_dot_v1_dot_isodrome__pb2.LookupResponse.FromString,
             options,
             channel_credentials,
             insecure,

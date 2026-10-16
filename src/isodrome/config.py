@@ -24,7 +24,7 @@ if sys.version_info >= (3, 11):
 else:
     import tomli as tomllib
 
-from isodrome.client import DEFAULT_ENDPOINT
+from isodrome._transport import DEFAULT_ENDPOINT
 
 DEFAULT_PROFILE = "default"
 

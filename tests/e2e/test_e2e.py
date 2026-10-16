@@ -115,7 +115,9 @@ def test_feed_end_to_end(logged_in, tmp_path):
     ok("feed", "delete", "weather", "--yes")
     ok("feed", "delete", "trades", "--yes")
     ok("namespace", "use", "--default")
-    ok("namespace", "delete", ns)
+    # Its deleted feeds can still be restored, so the namespace stays until they are purged.
+    kept = iso("namespace", "delete", ns)
+    assert kept.exit_code == 1 and "can still be undeleted" in kept.output
 
 
 def test_logout_revokes_a_signed_in_key():

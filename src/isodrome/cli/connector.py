@@ -31,6 +31,8 @@ def connector_templates(ctx: Context, details: bool) -> None:
         if details:
             if t.options_example:
                 click.echo(f"  options: {t.options_example}")
+            for cred in t.credentials:
+                click.echo(f"  credential {cred.name}: {cred.description}")
             for f in t.feeds:
                 click.echo(f"  feed {f.name}: {f.description}")
                 if f.licence:
@@ -50,10 +52,15 @@ def connection() -> None:
 @namespace_option
 @click.option("--options", "options_json", default="", help="JSON options (default: the template's).")
 @click.option("--paused", is_flag=True, help="Create it without starting it.")
+@click.option(
+    "--credentials", "credentials_file", type=click.File("r"),
+    help="A JSON file (or - for stdin) with the source credentials the template needs.",
+)
 @pass_context
-def connection_create(ctx: Context, name, template, namespace, options_json, paused) -> None:
+def connection_create(ctx: Context, name, template, namespace, options_json, paused, credentials_file) -> None:
     """Create a connection: it creates its feeds and a service account to write as, then runs
-    (admin keys only)."""
+    (admin keys only). Templates for sources that need your own account list the credentials
+    they need (`iso connector templates --details`)."""
     if options_json:
         try:
             json.loads(options_json)
@@ -62,10 +69,41 @@ def connection_create(ctx: Context, name, template, namespace, options_json, pau
     c = ctx.client().call(
         "CreateConnection",
         pb.CreateConnectionRequest(
-            name=name, template=template, namespace=ctx.namespace(namespace), options_json=options_json, paused=paused
+            name=name, template=template, namespace=ctx.namespace(namespace), options_json=options_json,
+            paused=paused, credentials_json=_credentials(credentials_file),
         ),
     )
     _print_connection(c)
+
+
+@connection.command("credentials")
+@click.argument("name")
+@click.option(
+    "--from", "credentials_file", type=click.File("r"), required=True,
+    help="A JSON file (or - for stdin) with the credentials; they are stored encrypted and never shown.",
+)
+@pass_context
+def connection_credentials(ctx: Context, name, credentials_file) -> None:
+    """Replace a connection's source credentials; it restarts with them (admin keys only)."""
+    c = ctx.client().call(
+        "SetConnectionCredentials",
+        pb.SetConnectionCredentialsRequest(name=name, credentials_json=_credentials(credentials_file)),
+    )
+    click.echo(f"Set credentials of {c.name}: {', '.join(c.credential_fields) or '(none)'}.")
+
+
+def _credentials(file) -> str:
+    """Credentials come from a file or stdin, never the command line (where history keeps them)."""
+    if file is None:
+        return ""
+    text = file.read()
+    try:
+        values = json.loads(text)
+    except ValueError as e:
+        raise click.BadParameter(f"not JSON: {e}", param_hint="credentials") from None
+    if not isinstance(values, dict) or not all(isinstance(v, str) for v in values.values()):
+        raise click.BadParameter('expected a JSON object of strings, e.g. {"api_key": "..."}', param_hint="credentials")
+    return text
 
 
 @connection.command("list")
@@ -135,6 +173,8 @@ def _print_connection(c: pb.Connection) -> None:
         ("feeds", ", ".join(f"{c.namespace}/{f}" for f in c.feeds) or "(none)"),
         ("options", c.options_json or "{}"),
         ("writes as", f"service account {c.service_account}"),
+        ("credentials", (", ".join(c.credential_fields) + f" (set {format_ns(c.credentials_set_at_ns)})")
+         if c.credential_fields else "(none)"),
         ("events sent", str(c.events_sent)),
         ("last event", format_ns(c.last_event_at_ns) if c.last_event_at_ns else "never"),
         ("heartbeat", format_ns(c.last_heartbeat_at_ns) if c.last_heartbeat_at_ns else "never"),

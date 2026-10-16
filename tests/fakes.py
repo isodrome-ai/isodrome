@@ -34,6 +34,8 @@ class FakeIsodrome(pb_grpc.IsodromeServicer):
         self.service_accounts: list[pb.ServiceAccount] = []
         self.connections: list[pb.Connection] = []
         self.requests: list[str] = []
+        self.capabilities: list[str] = []
+        self.estimate = (0, 0)
         self.feeds: dict[tuple[str, str], pb.Feed] = {}
         self.events: dict[tuple[str, str], list[tuple[int, dict]]] = {}
         self.seen_ids: set[str] = set()
@@ -58,8 +60,32 @@ class FakeIsodrome(pb_grpc.IsodromeServicer):
 
     def GetServerInfo(self, request, context):
         return pb.ServerInfo(
-            version="9.9.9", api_version="v1", public_url="", max_payload_bytes=1 << 20, dedupe_window_ns=900 * 10**9
+            version="9.9.9", api_version="v1", public_url="", max_payload_bytes=1 << 20, dedupe_window_ns=900 * 10**9,
+            capabilities=self.capabilities,
         )
+
+    def Lookup(self, request, context):
+        """Answers each probe with a row whose `value` is the probe's index (the logic itself is
+        the server's; this checks the request and how the answer is put back together)."""
+        self._auth(context)
+        self.last_lookup = request
+        probes = pa.ipc.open_stream(request.probe_batch.ipc).read_all()
+        n = probes.num_rows
+        # Answered in reverse, in two batches, and with no row for the last probe: order and
+        # gaps are the client's to handle.
+        rows = list(range(n - 1))[::-1]
+        for chunk in (rows[: len(rows) // 2], rows[len(rows) // 2:]):
+            if not chunk:
+                continue
+            table = pa.table({
+                "_probe": pa.array(chunk, pa.int64()),
+                "_at": probes.column("_at").take(chunk),
+                "_event_time": probes.column("_at").take(chunk),
+                "_published_time": pa.array([None] * len(chunk), pa.timestamp("ns", tz="UTC")),
+                "_receive_time": probes.column("_at").take(chunk),
+                "value": pa.array([float(i) for i in chunk]),
+            })
+            yield pb.LookupResponse(batch=pb.ArrowBatch(ipc=ipc(table)))
 
     def WhoAmI(self, request, context):
         self._auth(context)
@@ -128,8 +154,16 @@ class FakeIsodrome(pb_grpc.IsodromeServicer):
             name=request.name, template=request.template, namespace=request.namespace or "default",
             options_json=request.options_json or "{}", status="paused" if request.paused else "pending",
             paused=request.paused, service_account=f"connection-{request.name}", feeds=["forecast"],
+            credential_fields=sorted(json.loads(request.credentials_json)) if request.credentials_json else [],
         )
         self.connections.append(c)
+        return c
+
+    def SetConnectionCredentials(self, request, context):
+        self._auth(context)
+        c = next(c for c in self.connections if c.name == request.name)
+        del c.credential_fields[:]
+        c.credential_fields.extend(sorted(json.loads(request.credentials_json)))
         return c
 
     def ListConnections(self, request, context):
@@ -223,7 +257,13 @@ class FakeIsodrome(pb_grpc.IsodromeServicer):
         table = self._table(self._feed(request.feed, context), request.columns)
         if request.HasField("limit"):
             table = table.slice(0, request.limit)
-        yield pb.ReadResponse(batch=pb.ArrowBatch(ipc=ipc(table)), position=pb.Position(next_offsets=[table.num_rows]))
+        first = pb.ReadResponse(position=pb.Position(next_offsets=[table.num_rows]),
+                                estimated_rows=self.estimate[0], estimated_bytes=self.estimate[1])
+        if request.estimate_only:
+            yield first
+            return
+        first.batch.ipc = ipc(table)
+        yield first
 
     def Latest(self, request, context):
         self._auth(context)

@@ -17,6 +17,9 @@ def test_times():
     assert parse_time("2024-01-01T00:00:00.000000001Z") == 1_704_067_200_000_000_001
     assert parse_time("2024-01-01T01:00:00+01:00") == 1_704_067_200_000_000_000
     assert parse_time("2024-01-01") == 1_704_067_200_000_000_000
+    # Without seconds, with a space, or a zone without a colon (Python 3.10's fromisoformat refuses these).
+    assert parse_time("2024-01-01T00:00Z") == parse_time("2024-01-01 00:00") == 1_704_067_200_000_000_000
+    assert parse_time("2024-01-01T01:00+0100") == 1_704_067_200_000_000_000
     with pytest.raises(ValueError):
         parse_time("yesterday")
 

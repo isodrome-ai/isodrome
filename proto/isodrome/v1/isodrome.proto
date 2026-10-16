@@ -54,6 +54,9 @@ service Isodrome {
   rpc GetConnection(GetConnectionRequest) returns (Connection);
   rpc PauseConnection(PauseConnectionRequest) returns (Connection);
   rpc ResumeConnection(ResumeConnectionRequest) returns (Connection);
+  // Replaces a connection's credentials (for templates that need the owner's own account with
+  // the source). Write-only: credentials are never returned. The connection restarts with them.
+  rpc SetConnectionCredentials(SetConnectionCredentialsRequest) returns (Connection);
   // Stops it and deletes its service account. Its feeds and their data stay.
   rpc DeleteConnection(DeleteConnectionRequest) returns (DeleteConnectionResponse);
 
@@ -62,6 +65,8 @@ service Isodrome {
   rpc Latest(LatestRequest) returns (LatestResponse);
   rpc Read(ReadRequest) returns (stream ReadResponse);
   rpc Subscribe(SubscribeRequest) returns (stream SubscribeResponse);
+  // Point-in-time values for (key, time) probes: an as-of join against the client's rows.
+  rpc Lookup(LookupRequest) returns (stream LookupResponse);
 }
 
 // ---------- Server ----------
@@ -74,6 +79,10 @@ message ServerInfo {
   string public_url = 4;             // where clients reach this server, if configured
   int64 max_payload_bytes = 5;       // largest accepted event
   int64 dedupe_window_ns = 6;        // how long a message_id is remembered for retries
+  // Features this server has beyond the base v1 API, so a client can use them where they
+  // exist and fall back otherwise: "read.as_of_lag", "read.estimate", "lookup",
+  // "feeds.freshness", "connections", "connections.credentials".
+  repeated string capabilities = 7;
 }
 
 // ---------- Identity & tenancy ----------
@@ -213,7 +222,7 @@ enum ColumnType {
 message Column {
   string name = 1;              // dotted path for nested fields, e.g. "pitch.velocity"
   ColumnType type = 2;
-  int64 first_seen_ns = 3;      // receive time of the first event that contained it
+  int64 first_seen_ns = 3;      // receive time of the first event that contained it; 0 until that event is flushed
 }
 
 message FeedStats {
@@ -223,6 +232,11 @@ message FeedStats {
   int64 file_count = 4;
   int64 schema_conflicts = 5;
   RejectionStats rejections = 6;
+  // Freshness (0: no events): the greatest event time and receive time of any event, and the
+  // greatest publication time among unflushed events and each key's latest event.
+  int64 last_event_time_ns = 7;
+  int64 last_receive_time_ns = 8;
+  int64 last_published_time_ns = 9;
 }
 
 // Events refused at Send (each is also answered in its SendResponse and kept in the feed's
@@ -428,7 +442,7 @@ message ReadRequest {
   FeedRef feed = 1;
   optional int64 start_event_time_ns = 2;   // inclusive
   optional int64 end_event_time_ns = 3;     // exclusive
-  optional int64 as_of_ns = 4;              // only events with _receive_time <= as_of_ns
+  optional int64 as_of_ns = 4;              // only events known by then (see as_of_basis)
   repeated Filter filters = 5;
   repeated string columns = 6;              // empty = all inferred + system columns
   optional uint64 limit = 7;
@@ -441,7 +455,14 @@ message ReadRequest {
   optional Position at_position = 9;
   // Keep one event per distinct value of these columns, before `filters` are applied.
   optional Dedupe dedupe = 10;
-  AsOfBasis as_of_basis = 11;               // what `as_of_ns` is compared with
+  AsOfBasis as_of_basis = 11;               // what `as_of_ns` and `as_of_lag_ns` compare with
+  // Per row: only versions known at least this long before their own event time
+  // (known <= _event_time - as_of_lag_ns, "known" as in as_of_basis), e.g. "the forecast for
+  // each hour as it stood 24 h ahead". Combines with as_of_ns (both must hold); applied before
+  // dedupe, like as_of_ns. Must not be negative.
+  optional int64 as_of_lag_ns = 12;
+  // Answer with the estimates and the schema only (one message, no rows).
+  bool estimate_only = 13;
 }
 
 // Which time `as_of_ns` means.
@@ -459,6 +480,12 @@ message ReadResponse {
   ArrowBatch batch = 1;
   Position position = 2;                    // set on the first message: where this result ends
   int64 server_ns = 3;                      // on the first message: time from request to the plan being ready
+  // On the first message, before any rows: how big the result can be. Rows: in the files and
+  // unflushed events the time range and as-of select, before filters, dedupe and limit (an
+  // upper bound). Bytes: those rows × the selected columns' widths as Arrow sends them
+  // (strings estimated), so roughly what will be transferred.
+  int64 estimated_rows = 4;
+  int64 estimated_bytes = 5;
 }
 
 // A point in a feed's log: for each partition, by index, the first offset NOT included.
@@ -538,6 +565,12 @@ message ConnectorTemplate {
   string options_example = 4;        // JSON
   repeated ConnectorFeed feeds = 5;  // the feeds a connection creates
   int64 poll_interval_ms = 6;
+  // Credentials a connection must be given (e.g. an exchange API key); empty for open data.
+  repeated ConnectorCredential credentials = 7;
+}
+message ConnectorCredential {
+  string name = 1;                   // the key in credentials_json
+  string description = 2;
 }
 message ConnectorFeed {
   string name = 1;
@@ -570,6 +603,8 @@ message Connection {
   int64 events_sent = 14;
   int64 created_at_ns = 15;
   repeated string feeds = 16;
+  repeated string credential_fields = 17;  // the credentials given (names only, never values)
+  int64 credentials_set_at_ns = 18;  // 0: none
 }
 message CreateConnectionRequest {
   string name = 1;                   // ^[a-z][a-z0-9_-]{0,62}$, unique in the organization
@@ -577,6 +612,13 @@ message CreateConnectionRequest {
   string namespace = 3;              // empty: the credential's default namespace
   string options_json = 4;           // empty: the template's defaults
   bool paused = 5;                   // create without starting it
+  // The template's credentials as a JSON object of strings (see ConnectorTemplate.credentials).
+  // Stored encrypted; never returned.
+  string credentials_json = 6;
+}
+message SetConnectionCredentialsRequest {
+  string name = 1;
+  string credentials_json = 2;
 }
 message ListConnectionsRequest {}
 message ListConnectionsResponse { repeated Connection connections = 1; }
@@ -585,3 +627,32 @@ message PauseConnectionRequest { string name = 1; }
 message ResumeConnectionRequest { string name = 1; }
 message DeleteConnectionRequest { string name = 1; }
 message DeleteConnectionResponse {}
+
+// ---------- Lookup ----------
+
+// For each probe (key, at): the version of that key with the greatest _event_time among those
+// with _event_time <= at and known by at ("known" as in as_of_basis); ties go to the latest
+// known, then to arrival order. No such version: nulls. Filters apply to the chosen version
+// (failing: nulls), so a filter never brings back a superseded version. Unkeyed feeds: the key
+// is ignored.
+message LookupRequest {
+  FeedRef feed = 1;
+  repeated LookupProbe probes = 2;
+  // Probes as Arrow instead (appended after `probes`): columns `_key` (utf8) and `_at`
+  // (timestamp[ns, UTC]).
+  ArrowBatch probe_batch = 3;
+  AsOfBasis as_of_basis = 4;
+  repeated string columns = 5;               // empty = all inferred + system columns
+  repeated Filter filters = 6;
+  bool include_payload = 7;
+}
+message LookupProbe {
+  string key = 1;
+  int64 at_ns = 2;
+}
+// One row per probe, in probe order: `_probe` (its index), `_at`, then the columns. At most
+// 100,000 probes per request.
+message LookupResponse {
+  ArrowBatch batch = 1;
+  int64 server_ns = 2;                       // on the first message
+}

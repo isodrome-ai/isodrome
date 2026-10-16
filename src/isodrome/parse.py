@@ -47,12 +47,17 @@ def parse_time(text: str) -> int:
         return now_ns()
     if re.fullmatch(r"-?\d+", text):
         return int(text)
-    match = re.fullmatch(r"(.+?T\d\d:\d\d:\d\d)(?:\.(\d{1,9}))?(Z|[+-]\d\d:?\d\d)?", text, re.IGNORECASE)
+    match = re.fullmatch(
+        r"(\d{4}-\d\d-\d\d)[T ](\d\d:\d\d)(:\d\d)?(?:\.(\d{1,9}))?(Z|[+-]\d\d:?\d\d)?", text, re.IGNORECASE
+    )
     try:
         if match:
-            base, fraction, zone = match.groups()
+            day, minutes, secs, fraction, zone = match.groups()
             zone = "+00:00" if zone in (None, "Z", "z") else zone
-            seconds = datetime.fromisoformat(base + zone)
+            if ":" not in zone:
+                zone = zone[:3] + ":" + zone[3:]
+            # Spelled out for Python 3.10, whose fromisoformat needs seconds and a colon in the zone.
+            seconds = datetime.fromisoformat(f"{day}T{minutes}{secs or ':00'}{zone}")
             nanos = int((fraction or "").ljust(9, "0"))
             return int(seconds.timestamp()) * 1_000_000_000 + nanos
         day = datetime.fromisoformat(text)
@@ -142,3 +147,48 @@ def parse_position(text: str) -> pb.Position:
 
 def format_position(position: pb.Position) -> str:
     return ",".join(str(o) for o in position.next_offsets)
+
+
+def to_ns(value, *, relative_to_now: bool = False) -> int:
+    """A time given any usual way → integer nanoseconds since the epoch, UTC.
+
+    Accepts `datetime` (naive means UTC), pandas `Timestamp`, `numpy.datetime64`, RFC 3339
+    strings or dates, integer nanoseconds, and "now". With `relative_to_now`, a duration string
+    ("90s", "1h", "7d") means that long ago.
+    """
+    if isinstance(value, bool):
+        raise TypeError(f"not a time: {value!r}")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        text = value.strip()
+        if relative_to_now and re.fullmatch(r"(\d+(?:\.\d+)?\s*(ns|us|ms|s|m|h|d|w))+", text.lower()):
+            return now_ns() - parse_duration(text)
+        return parse_time(text)
+    if hasattr(value, "value") and hasattr(value, "tz_localize"):  # pandas Timestamp
+        if value.tzinfo is None:
+            value = value.tz_localize("UTC")
+        return int(value.value)
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        seconds = int(value.timestamp() // 1)
+        return seconds * 1_000_000_000 + value.microsecond * 1_000
+    if type(value).__name__ == "datetime64":
+        return int(value.astype("datetime64[ns]").astype("int64"))
+    raise TypeError(f"not a time: {value!r} (use a datetime, an RFC 3339 string or integer nanoseconds)")
+
+
+def to_duration_ns(value) -> int:
+    """A duration given as a string ("24h"), `timedelta`, pandas `Timedelta` or integer ns."""
+    if isinstance(value, bool):
+        raise TypeError(f"not a duration: {value!r}")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        return parse_duration(value)
+    if hasattr(value, "value") and type(value).__name__ == "Timedelta":
+        return int(value.value)
+    if hasattr(value, "total_seconds"):
+        return (value.days * 86_400 + value.seconds) * 1_000_000_000 + value.microseconds * 1_000
+    raise TypeError(f"not a duration: {value!r} (use e.g. '24h' or a timedelta)")
