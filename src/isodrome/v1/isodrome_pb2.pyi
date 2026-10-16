@@ -151,20 +151,22 @@ class GetServerInfoRequest(_message.Message):
     def __init__(self) -> None: ...
 
 class ServerInfo(_message.Message):
-    __slots__ = ("version", "revision", "api_version", "public_url", "max_payload_bytes", "dedupe_window_ns")
+    __slots__ = ("version", "revision", "api_version", "public_url", "max_payload_bytes", "dedupe_window_ns", "capabilities")
     VERSION_FIELD_NUMBER: _ClassVar[int]
     REVISION_FIELD_NUMBER: _ClassVar[int]
     API_VERSION_FIELD_NUMBER: _ClassVar[int]
     PUBLIC_URL_FIELD_NUMBER: _ClassVar[int]
     MAX_PAYLOAD_BYTES_FIELD_NUMBER: _ClassVar[int]
     DEDUPE_WINDOW_NS_FIELD_NUMBER: _ClassVar[int]
+    CAPABILITIES_FIELD_NUMBER: _ClassVar[int]
     version: str
     revision: str
     api_version: str
     public_url: str
     max_payload_bytes: int
     dedupe_window_ns: int
-    def __init__(self, version: _Optional[str] = ..., revision: _Optional[str] = ..., api_version: _Optional[str] = ..., public_url: _Optional[str] = ..., max_payload_bytes: _Optional[int] = ..., dedupe_window_ns: _Optional[int] = ...) -> None: ...
+    capabilities: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, version: _Optional[str] = ..., revision: _Optional[str] = ..., api_version: _Optional[str] = ..., public_url: _Optional[str] = ..., max_payload_bytes: _Optional[int] = ..., dedupe_window_ns: _Optional[int] = ..., capabilities: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class WhoAmIRequest(_message.Message):
     __slots__ = ()
@@ -365,20 +367,26 @@ class Column(_message.Message):
     def __init__(self, name: _Optional[str] = ..., type: _Optional[_Union[ColumnType, str]] = ..., first_seen_ns: _Optional[int] = ...) -> None: ...
 
 class FeedStats(_message.Message):
-    __slots__ = ("events_flushed", "events_pending_flush", "flush_lag_ms", "file_count", "schema_conflicts", "rejections")
+    __slots__ = ("events_flushed", "events_pending_flush", "flush_lag_ms", "file_count", "schema_conflicts", "rejections", "last_event_time_ns", "last_receive_time_ns", "last_published_time_ns")
     EVENTS_FLUSHED_FIELD_NUMBER: _ClassVar[int]
     EVENTS_PENDING_FLUSH_FIELD_NUMBER: _ClassVar[int]
     FLUSH_LAG_MS_FIELD_NUMBER: _ClassVar[int]
     FILE_COUNT_FIELD_NUMBER: _ClassVar[int]
     SCHEMA_CONFLICTS_FIELD_NUMBER: _ClassVar[int]
     REJECTIONS_FIELD_NUMBER: _ClassVar[int]
+    LAST_EVENT_TIME_NS_FIELD_NUMBER: _ClassVar[int]
+    LAST_RECEIVE_TIME_NS_FIELD_NUMBER: _ClassVar[int]
+    LAST_PUBLISHED_TIME_NS_FIELD_NUMBER: _ClassVar[int]
     events_flushed: int
     events_pending_flush: int
     flush_lag_ms: int
     file_count: int
     schema_conflicts: int
     rejections: RejectionStats
-    def __init__(self, events_flushed: _Optional[int] = ..., events_pending_flush: _Optional[int] = ..., flush_lag_ms: _Optional[int] = ..., file_count: _Optional[int] = ..., schema_conflicts: _Optional[int] = ..., rejections: _Optional[_Union[RejectionStats, _Mapping]] = ...) -> None: ...
+    last_event_time_ns: int
+    last_receive_time_ns: int
+    last_published_time_ns: int
+    def __init__(self, events_flushed: _Optional[int] = ..., events_pending_flush: _Optional[int] = ..., flush_lag_ms: _Optional[int] = ..., file_count: _Optional[int] = ..., schema_conflicts: _Optional[int] = ..., rejections: _Optional[_Union[RejectionStats, _Mapping]] = ..., last_event_time_ns: _Optional[int] = ..., last_receive_time_ns: _Optional[int] = ..., last_published_time_ns: _Optional[int] = ...) -> None: ...
 
 class RejectionStats(_message.Message):
     __slots__ = ("total", "last_hour", "last_hour_by_reason", "latest")
@@ -666,7 +674,7 @@ class LatestResponse(_message.Message):
     def __init__(self, batch: _Optional[_Union[ArrowBatch, _Mapping]] = ..., server_ns: _Optional[int] = ...) -> None: ...
 
 class ReadRequest(_message.Message):
-    __slots__ = ("feed", "start_event_time_ns", "end_event_time_ns", "as_of_ns", "filters", "columns", "limit", "include_payload", "at_position", "dedupe", "as_of_basis")
+    __slots__ = ("feed", "start_event_time_ns", "end_event_time_ns", "as_of_ns", "filters", "columns", "limit", "include_payload", "at_position", "dedupe", "as_of_basis", "as_of_lag_ns", "estimate_only")
     FEED_FIELD_NUMBER: _ClassVar[int]
     START_EVENT_TIME_NS_FIELD_NUMBER: _ClassVar[int]
     END_EVENT_TIME_NS_FIELD_NUMBER: _ClassVar[int]
@@ -678,6 +686,8 @@ class ReadRequest(_message.Message):
     AT_POSITION_FIELD_NUMBER: _ClassVar[int]
     DEDUPE_FIELD_NUMBER: _ClassVar[int]
     AS_OF_BASIS_FIELD_NUMBER: _ClassVar[int]
+    AS_OF_LAG_NS_FIELD_NUMBER: _ClassVar[int]
+    ESTIMATE_ONLY_FIELD_NUMBER: _ClassVar[int]
     feed: FeedRef
     start_event_time_ns: int
     end_event_time_ns: int
@@ -689,17 +699,23 @@ class ReadRequest(_message.Message):
     at_position: Position
     dedupe: Dedupe
     as_of_basis: AsOfBasis
-    def __init__(self, feed: _Optional[_Union[FeedRef, _Mapping]] = ..., start_event_time_ns: _Optional[int] = ..., end_event_time_ns: _Optional[int] = ..., as_of_ns: _Optional[int] = ..., filters: _Optional[_Iterable[_Union[Filter, _Mapping]]] = ..., columns: _Optional[_Iterable[str]] = ..., limit: _Optional[int] = ..., include_payload: bool = ..., at_position: _Optional[_Union[Position, _Mapping]] = ..., dedupe: _Optional[_Union[Dedupe, _Mapping]] = ..., as_of_basis: _Optional[_Union[AsOfBasis, str]] = ...) -> None: ...
+    as_of_lag_ns: int
+    estimate_only: bool
+    def __init__(self, feed: _Optional[_Union[FeedRef, _Mapping]] = ..., start_event_time_ns: _Optional[int] = ..., end_event_time_ns: _Optional[int] = ..., as_of_ns: _Optional[int] = ..., filters: _Optional[_Iterable[_Union[Filter, _Mapping]]] = ..., columns: _Optional[_Iterable[str]] = ..., limit: _Optional[int] = ..., include_payload: bool = ..., at_position: _Optional[_Union[Position, _Mapping]] = ..., dedupe: _Optional[_Union[Dedupe, _Mapping]] = ..., as_of_basis: _Optional[_Union[AsOfBasis, str]] = ..., as_of_lag_ns: _Optional[int] = ..., estimate_only: bool = ...) -> None: ...
 
 class ReadResponse(_message.Message):
-    __slots__ = ("batch", "position", "server_ns")
+    __slots__ = ("batch", "position", "server_ns", "estimated_rows", "estimated_bytes")
     BATCH_FIELD_NUMBER: _ClassVar[int]
     POSITION_FIELD_NUMBER: _ClassVar[int]
     SERVER_NS_FIELD_NUMBER: _ClassVar[int]
+    ESTIMATED_ROWS_FIELD_NUMBER: _ClassVar[int]
+    ESTIMATED_BYTES_FIELD_NUMBER: _ClassVar[int]
     batch: ArrowBatch
     position: Position
     server_ns: int
-    def __init__(self, batch: _Optional[_Union[ArrowBatch, _Mapping]] = ..., position: _Optional[_Union[Position, _Mapping]] = ..., server_ns: _Optional[int] = ...) -> None: ...
+    estimated_rows: int
+    estimated_bytes: int
+    def __init__(self, batch: _Optional[_Union[ArrowBatch, _Mapping]] = ..., position: _Optional[_Union[Position, _Mapping]] = ..., server_ns: _Optional[int] = ..., estimated_rows: _Optional[int] = ..., estimated_bytes: _Optional[int] = ...) -> None: ...
 
 class Position(_message.Message):
     __slots__ = ("next_offsets",)
@@ -924,3 +940,37 @@ class DeleteConnectionRequest(_message.Message):
 class DeleteConnectionResponse(_message.Message):
     __slots__ = ()
     def __init__(self) -> None: ...
+
+class LookupRequest(_message.Message):
+    __slots__ = ("feed", "probes", "probe_batch", "as_of_basis", "columns", "filters", "include_payload")
+    FEED_FIELD_NUMBER: _ClassVar[int]
+    PROBES_FIELD_NUMBER: _ClassVar[int]
+    PROBE_BATCH_FIELD_NUMBER: _ClassVar[int]
+    AS_OF_BASIS_FIELD_NUMBER: _ClassVar[int]
+    COLUMNS_FIELD_NUMBER: _ClassVar[int]
+    FILTERS_FIELD_NUMBER: _ClassVar[int]
+    INCLUDE_PAYLOAD_FIELD_NUMBER: _ClassVar[int]
+    feed: FeedRef
+    probes: _containers.RepeatedCompositeFieldContainer[LookupProbe]
+    probe_batch: ArrowBatch
+    as_of_basis: AsOfBasis
+    columns: _containers.RepeatedScalarFieldContainer[str]
+    filters: _containers.RepeatedCompositeFieldContainer[Filter]
+    include_payload: bool
+    def __init__(self, feed: _Optional[_Union[FeedRef, _Mapping]] = ..., probes: _Optional[_Iterable[_Union[LookupProbe, _Mapping]]] = ..., probe_batch: _Optional[_Union[ArrowBatch, _Mapping]] = ..., as_of_basis: _Optional[_Union[AsOfBasis, str]] = ..., columns: _Optional[_Iterable[str]] = ..., filters: _Optional[_Iterable[_Union[Filter, _Mapping]]] = ..., include_payload: bool = ...) -> None: ...
+
+class LookupProbe(_message.Message):
+    __slots__ = ("key", "at_ns")
+    KEY_FIELD_NUMBER: _ClassVar[int]
+    AT_NS_FIELD_NUMBER: _ClassVar[int]
+    key: str
+    at_ns: int
+    def __init__(self, key: _Optional[str] = ..., at_ns: _Optional[int] = ...) -> None: ...
+
+class LookupResponse(_message.Message):
+    __slots__ = ("batch", "server_ns")
+    BATCH_FIELD_NUMBER: _ClassVar[int]
+    SERVER_NS_FIELD_NUMBER: _ClassVar[int]
+    batch: ArrowBatch
+    server_ns: int
+    def __init__(self, batch: _Optional[_Union[ArrowBatch, _Mapping]] = ..., server_ns: _Optional[int] = ...) -> None: ...

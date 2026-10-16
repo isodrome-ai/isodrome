@@ -6,8 +6,12 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 
-from isodrome.query import TIME_COLUMNS, Col, Query
+from isodrome import errors
+from isodrome.output import decode
+from isodrome.query import BASES, TIME_COLUMNS, Col, Query
+from isodrome.v1 import isodrome_pb2 as pb
 
 if TYPE_CHECKING:
     from isodrome._feed import Feed
@@ -34,7 +38,8 @@ def as_of_join(
       `_event_time`, `_published_time` and `_receive_time` always come too.
 
     "Latest" means the newest event time among those known; between versions of one event, the
-    one known last. Rows with nothing known yet get missing values. `right` may be a feed or a
+    one known last. The server does the join where it can (its Lookup); otherwise the SDK reads
+    the versions and does it locally, with the same answer. Rows with nothing known yet get missing values. `right` may be a feed or a
     query of one (its `where`, `start`/`since` and `as_of` still apply); its versions are read
     up to the latest `at`, for the keys present in `left`.
 
@@ -51,6 +56,9 @@ def as_of_join(
     if times.isna().any():
         raise ValueError(f"left[{at!r}] has missing times")
     wanted = list(columns) if columns is not None else (list(query.columns) if query.columns else None)
+
+    if _server_can_look_up(query):
+        return _lookup(left, query, times, key, basis, wanted, suffix)
 
     versions = query._with(end=times.max() + pd.Timedelta(1, "ns"))
     if key is not None:
@@ -105,4 +113,65 @@ def as_of_join(
     picked.index = out.index
     for column in bring:
         out[column if column not in out else column + suffix] = picked[column]
+    return out
+
+
+LOOKUP_PROBES = 100_000  # the server's limit per call
+
+
+def _server_can_look_up(query: Query) -> bool:
+    """The server's Lookup does the join, unless the query narrows the versions in a way Lookup
+    cannot express (a time window, an as-of moment, a position): then it runs locally."""
+    narrowed = (query.start, query.end, query.since, query.as_of, query.at_position)
+    return (
+        query._feed is not None
+        and "lookup" in query._feed._client_obj.capabilities
+        and all(v is None for v in narrowed)
+    )
+
+
+def _lookup(left, query: Query, times, key, basis, wanted, suffix) -> pd.DataFrame:
+    columns = list(dict.fromkeys(list(TIME_COLUMNS) + wanted)) if wanted is not None else []
+    keys = left[key].astype(str).tolist() if key is not None else [""] * len(left)
+    at_ns = times.astype("int64").tolist()
+    frames = []
+    for start in range(0, len(left), LOOKUP_PROBES):
+        probes = pa.table({
+            "_key": pa.array(keys[start:start + LOOKUP_PROBES], pa.utf8()),
+            "_at": pa.array(at_ns[start:start + LOOKUP_PROBES], pa.timestamp("ns", tz="UTC")),
+        })
+        sink = pa.BufferOutputStream()
+        with pa.ipc.new_stream(sink, probes.schema) as writer:
+            writer.write_table(probes)
+        request = pb.LookupRequest(
+            feed=query._feed._pb_ref,
+            probe_batch=pb.ArrowBatch(ipc=sink.getvalue().to_pybytes()),
+            as_of_basis=BASES[basis],
+            columns=columns,
+            filters=[c.to_pb() for c in query.filters],
+            include_payload="_payload" in columns,
+        )
+        try:
+            for message in query._client().stream("Lookup", request, timeout=600):
+                table = decode(message.batch.ipc)
+                if table is not None and table.num_rows:
+                    frame = table.to_pandas()
+                    frame["_probe"] += start
+                    frames.append(frame)
+        except Exception as e:
+            import grpc
+
+            if isinstance(e, grpc.RpcError):
+                raise errors.translate(e) from None
+            raise
+    found = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame({"_probe": []})
+    found = found.set_index("_probe").reindex(range(len(left)))
+    bring = list(TIME_COLUMNS) + (
+        [c for c in wanted if c not in TIME_COLUMNS] if wanted is not None
+        else [c for c in found.columns if not c.startswith("_")]
+    )
+    out = left.copy()
+    for column in bring:
+        values = found[column] if column in found else pd.Series(np.nan, index=found.index)
+        out[column if column not in out else column + suffix] = values.to_numpy()
     return out

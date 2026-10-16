@@ -101,11 +101,37 @@ class Feed:
         `_event_time`, `_published_time`, `_receive_time`, `_key`, ...)."""
         return {c.name: _COLUMN_TYPES.get(c.type, "?") for c in self._full().columns}
 
+    def _stats(self) -> pb.FeedStats:
+        # A list's summaries carry the stats where the server has feeds.freshness.
+        if self._complete or "feeds.freshness" in self._client_obj.capabilities:
+            return self._meta.stats
+        return self._full().stats
+
     @property
     def events(self) -> int:
         """Events stored (flushed and pending)."""
-        s = self._full().stats
+        s = self._stats()
         return s.events_flushed + s.events_pending_flush
+
+    def _time(self, ns: int):
+        import pandas as pd
+
+        return pd.Timestamp(ns, unit="ns", tz="UTC") if ns else None
+
+    @property
+    def last_event_time(self):
+        """The newest event time of any event (a pandas Timestamp), or None."""
+        return self._time(self._stats().last_event_time_ns)
+
+    @property
+    def last_received(self):
+        """When the newest event arrived, or None: how fresh the feed is."""
+        return self._time(self._stats().last_receive_time_ns)
+
+    @property
+    def last_published(self):
+        """The newest publication time the source gave, or None."""
+        return self._time(self._stats().last_published_time_ns)
 
     def refresh(self) -> Feed:
         """Fetch the description again (columns and counts change as events arrive)."""
@@ -305,6 +331,8 @@ class Feed:
         rows += [
             ("access", "public" if self.public else "your organization"),
             ("events", f"{self.events:,}"),
+            ("last received", str(self.last_received or "never")),
+            ("newest event time", str(self.last_event_time or "-")),
             ("key", self.key_field or "(none: one stream)"),
             ("event time", self.time_field or "(arrival)"),
         ]
@@ -366,6 +394,8 @@ class FeedList(list):
             "public": f.public,
             "key": f.key_field,
             "event time": f.time_field or "(arrival)",
+            "events": f.events,
+            "last received": f.last_received,
             "description": f.description,
         } for f in self])
 

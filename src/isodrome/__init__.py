@@ -46,6 +46,7 @@ __all__ = [
     "FailedPrecondition",
     "Unavailable",
     "Rejected",
+    "LargeReadWarning",
 ]
 
 _default = None
@@ -61,7 +62,7 @@ def __getattr__(name):
         from isodrome._feed import Feed
 
         return Feed
-    if name in ("Query", "col"):
+    if name in ("Query", "col", "LargeReadWarning"):
         from isodrome import query
 
         return getattr(query, name)

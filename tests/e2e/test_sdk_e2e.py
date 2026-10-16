@@ -99,3 +99,43 @@ def _rows(query, n):
     df = query.to_df()
     assert len(df) == n
     return df
+
+
+def test_server_and_local_point_in_time_agree(client):
+    """as_of_lag and as_of_join give the same answers whether the server computes them
+    (read.as_of_lag, lookup) or the SDK does from versions."""
+    if not {"read.as_of_lag", "lookup"} <= client.capabilities:
+        pytest.skip("this server has no read.as_of_lag/lookup to compare with")
+    name = f"pit_{uuid.uuid4().hex[:8]}"
+    feed = client.create_feed(name, key="location", time_field="valid_time", publication_time_field="published")
+    rows = []
+    for loc in ("dub", "cork"):
+        for run in range(4):                                    # runs published 3 h apart
+            published = ts("2026-10-16T00:00") + pd.Timedelta(hours=3 * run)
+            for step in range(1, 7):                            # each forecasting 6 hours
+                valid = ts("2026-10-16T00:00") + pd.Timedelta(hours=3 * run + step)
+                rows.append({"location": loc, "valid_time": valid, "published": published,
+                             "temp": float(run * 10 + step + (100 if loc == "cork" else 0))})
+    feed.push(pd.DataFrame(rows))
+    eventually(lambda: _rows(feed.versions(), len(rows)))
+
+    lagged = dict(as_of_lag="4h", basis="published", dedupe=["_key", "_event_time"], order="publication",
+                  columns=["_key", "_event_time", "temp"])
+    probes = pd.DataFrame({"at": pd.date_range("2026-10-16T00:30Z", periods=12, freq="2h").tolist() * 2,
+                           "location": ["dub"] * 12 + ["cork"] * 12})
+
+    def compute():
+        return (feed.query(**lagged).to_df().sort_values(["_key", "_event_time"]).reset_index(drop=True),
+                iso.as_of_join(probes, feed, at="at", key="location", columns=["temp"]))
+
+    on_server = compute()
+    saved = client._capabilities
+    client._capabilities = frozenset()
+    try:
+        locally = compute()
+    finally:
+        client._capabilities = saved
+    pd.testing.assert_frame_equal(on_server[0], locally[0])
+    pd.testing.assert_frame_equal(on_server[1].reset_index(drop=True), locally[1].reset_index(drop=True),
+                                  check_dtype=False)
+    assert len(on_server[0]) > 0 and on_server[1]["temp"].notna().sum() > 0

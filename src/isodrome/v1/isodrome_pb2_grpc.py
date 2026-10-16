@@ -189,6 +189,11 @@ class IsodromeStub(object):
                 request_serializer=isodrome_dot_v1_dot_isodrome__pb2.SubscribeRequest.SerializeToString,
                 response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.SubscribeResponse.FromString,
                 _registered_method=True)
+        self.Lookup = channel.unary_stream(
+                '/isodrome.v1.Isodrome/Lookup',
+                request_serializer=isodrome_dot_v1_dot_isodrome__pb2.LookupRequest.SerializeToString,
+                response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.LookupResponse.FromString,
+                _registered_method=True)
 
 
 class IsodromeServicer(object):
@@ -405,6 +410,13 @@ class IsodromeServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def Lookup(self, request, context):
+        """Point-in-time values for (key, time) probes: an as-of join against the client's rows.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_IsodromeServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -562,6 +574,11 @@ def add_IsodromeServicer_to_server(servicer, server):
                     servicer.Subscribe,
                     request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.SubscribeRequest.FromString,
                     response_serializer=isodrome_dot_v1_dot_isodrome__pb2.SubscribeResponse.SerializeToString,
+            ),
+            'Lookup': grpc.unary_stream_rpc_method_handler(
+                    servicer.Lookup,
+                    request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.LookupRequest.FromString,
+                    response_serializer=isodrome_dot_v1_dot_isodrome__pb2.LookupResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -1401,6 +1418,33 @@ class Isodrome(object):
             '/isodrome.v1.Isodrome/Subscribe',
             isodrome_dot_v1_dot_isodrome__pb2.SubscribeRequest.SerializeToString,
             isodrome_dot_v1_dot_isodrome__pb2.SubscribeResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Lookup(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_stream(
+            request,
+            target,
+            '/isodrome.v1.Isodrome/Lookup',
+            isodrome_dot_v1_dot_isodrome__pb2.LookupRequest.SerializeToString,
+            isodrome_dot_v1_dot_isodrome__pb2.LookupResponse.FromString,
             options,
             channel_credentials,
             insecure,

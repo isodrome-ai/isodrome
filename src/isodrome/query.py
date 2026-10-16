@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import warnings
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Iterable
 
@@ -20,6 +21,20 @@ if TYPE_CHECKING:
     from isodrome._feed import Feed
 
 TIME_COLUMNS = ("_event_time", "_published_time", "_receive_time")
+LARGE_READ_BYTES = 100_000_000  # warn when reading this much with every column
+PROGRESS_BYTES = 20_000_000     # show progress (with tqdm) from this size
+
+
+class LargeReadWarning(UserWarning):
+    """A read that would transfer a lot of data, most likely more columns than needed."""
+
+
+@dataclass
+class _Read:
+    table: pa.Table = field(default_factory=lambda: pa.table({}))
+    position: tuple[int, ...] | None = None
+    server_ns: int = 0
+    estimate: dict | None = None
 BASES = {"received": pb.AS_OF_BASIS_RECEIVED, "published": pb.AS_OF_BASIS_PUBLISHED}
 KEEP = {"first": pb.DEDUPE_KEEP_FIRST, "last": pb.DEDUPE_KEEP_LAST}
 ORDERS = {"arrival": pb.DEDUPE_ORDER_ARRIVAL, "publication": pb.DEDUPE_ORDER_PUBLICATION}
@@ -252,8 +267,6 @@ class Query:
         query = dataclasses.replace(self, **changes)
         if query.since is not None and query.start is not None:
             raise ValueError("give since= or start=, not both")
-        if query.as_of_lag is not None and query.at_position is not None:
-            raise ValueError("as_of_lag= is computed from versions, so it cannot be pinned with at=")
         return query
 
     # ----- building -----
@@ -278,10 +291,21 @@ class Query:
 
     def fetch(self) -> Result:
         """Runs the query and returns a Result (with `.to_df()`, `.position`, `.attribution`)."""
-        if self.as_of_lag is not None:
+        if self.as_of_lag is not None and not self._server_has("read.as_of_lag"):
             return self._fetch_with_lag()
-        table, position, server_ns = self._read(self._request())
-        return Result(table=table, position=position, server_ns=server_ns, feed=self._feed, query=self)
+        read = self._read(self._request())
+        return Result(table=read.table, position=read.position, server_ns=read.server_ns, feed=self._feed,
+                      query=self, estimate=read.estimate)
+
+    def estimate(self) -> dict:
+        """How big this query's result can be, without reading it: {"rows", "bytes"}. Rows are
+        an upper bound (before filters, de-duplication and limit); bytes are roughly what would
+        be transferred, so choosing columns shows up here."""
+        if not self._server_has("read.estimate"):
+            raise errors.IsodromeError("this server does not give read estimates")
+        request = self._request()
+        request.estimate_only = True
+        return self._read(request).estimate or {"rows": 0, "bytes": 0}
 
     def to_df(self) -> pd.DataFrame:
         """Runs the query; the events as a pandas DataFrame."""
@@ -295,13 +319,12 @@ class Query:
 
     def count(self) -> int:
         """The number of matching events (without fetching their data)."""
-        if self.as_of_lag is not None:
+        if self.as_of_lag is not None and not self._server_has("read.as_of_lag"):
             return len(self.fetch())
         request = self._request()
         if not request.columns:
             request.columns[:] = ["_offset"]
-        table, _, _ = self._read(request)
-        return table.num_rows
+        return self._read(request).table.num_rows
 
     # ----- internals -----
 
@@ -309,6 +332,9 @@ class Query:
         if self._feed is None:
             raise RuntimeError("this query is not attached to a feed; build it with feed.query(...)")
         return self._feed._client
+
+    def _server_has(self, capability: str) -> bool:
+        return self._feed is not None and capability in self._feed._client_obj.capabilities
 
     def _request(self) -> pb.ReadRequest:
         request = pb.ReadRequest(
@@ -328,6 +354,9 @@ class Query:
             request.end_event_time_ns = self.end
         if self.as_of is not None:
             request.as_of_ns = self.as_of
+        if self.as_of_lag is not None:
+            request.as_of_lag_ns = self.as_of_lag
+        if self.as_of is not None or self.as_of_lag is not None:
             request.as_of_basis = BASES[self.basis]
         if self.limit is not None:
             request.limit = self.limit
@@ -338,18 +367,47 @@ class Query:
         return request
 
     @errors.translating
-    def _read(self, request: pb.ReadRequest) -> tuple[pa.Table, tuple[int, ...] | None, int]:
-        tables, position, server_ns = [], None, 0
-        for message in self._client().stream("Read", request, timeout=600):
-            if message.HasField("position"):
-                position = tuple(message.position.next_offsets)
-                server_ns = message.server_ns
-            table = decode(message.batch.ipc)
-            if table is not None:
-                tables.append(table)
-        if not tables:
-            return pa.table({}), position, server_ns
-        return pa.concat_tables(tables, promote_options="default"), position, server_ns
+    def _read(self, request: pb.ReadRequest) -> _Read:
+        out = _Read()
+        tables = []
+        progress = None
+        try:
+            for message in self._client().stream("Read", request, timeout=600):
+                if message.HasField("position"):
+                    out.position = tuple(message.position.next_offsets)
+                    out.server_ns = message.server_ns
+                    if message.estimated_rows or message.estimated_bytes:
+                        out.estimate = {"rows": message.estimated_rows, "bytes": message.estimated_bytes}
+                        if not request.estimate_only:
+                            progress = self._large_read(request, out.estimate)
+                table = decode(message.batch.ipc)
+                if table is not None:
+                    tables.append(table)
+                    if progress is not None:
+                        progress.update(message.batch.ByteSize())
+        finally:
+            if progress is not None:
+                progress.close()
+        if tables:
+            out.table = pa.concat_tables(tables, promote_options="default")
+        return out
+
+    def _large_read(self, request: pb.ReadRequest, estimate: dict):
+        """Warns about a big read of every column, and shows progress for big reads (with tqdm)."""
+        size = estimate["bytes"]
+        if size >= LARGE_READ_BYTES and not request.columns:
+            warnings.warn(
+                f"this read is up to {size / 1e6:,.0f} MB with every column; choose columns= to read less",
+                LargeReadWarning,
+                stacklevel=5,
+            )
+        if size >= PROGRESS_BYTES:
+            try:
+                from tqdm.auto import tqdm
+            except ImportError:
+                return None
+            return tqdm(total=size, unit="B", unit_scale=True, desc=self.feed.rsplit("/", 1)[-1], leave=False)
+        return None
 
     def _fetch_with_lag(self) -> Result:
         """Each event as known `as_of_lag` before its own event time: every version is read
@@ -367,11 +425,14 @@ class Query:
         needed = None
         if wanted is not None:
             needed = list(dict.fromkeys(wanted + list(TIME_COLUMNS) + list(dedupe) + [c.column for c in late]))
+        if self.at_position is not None:
+            raise ValueError("this server cannot pin as_of_lag= to a position (it lacks read.as_of_lag)")
         versions = dataclasses.replace(
             self, as_of_lag=None, dedupe=None, limit=None, filters=early, columns=tuple(needed) if needed else None,
         )
-        table, position, server_ns = versions._read(versions._request())
-        df = table.to_pandas()
+        read = versions._read(versions._request())
+        position, server_ns = read.position, read.server_ns
+        df = read.table.to_pandas()
         if len(df):
             if "_published_time" not in df:
                 df["_published_time"] = pd.NaT

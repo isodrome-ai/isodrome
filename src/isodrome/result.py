@@ -30,6 +30,7 @@ class Result:
         server_ns: int = 0,
         feed: Feed | None = None,
         query: Query | None = None,
+        estimate: dict | None = None,
     ):
         self._table = table
         self._df = df
@@ -37,6 +38,7 @@ class Result:
         self.server_ms = server_ns / 1e6
         self.feed = feed
         self.query = query
+        self.estimate = estimate  # the server's size estimate before reading: {"rows", "bytes"}
 
     @property
     def attribution(self) -> str:

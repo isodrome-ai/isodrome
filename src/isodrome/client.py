@@ -45,6 +45,7 @@ class Client:
         self._namespace = namespace or ""  # `iso namespace use`: NAME or ORG/NAME
         self.profile = profile
         self._me: pb.WhoAmIResponse | None = None
+        self._capabilities: frozenset[str] | None = None
 
     @property
     def endpoint(self) -> str:
@@ -55,6 +56,14 @@ class Client:
         if self._me is None:
             self._me = errors.call(self._transport.call, "WhoAmI", pb.WhoAmIRequest())
         return self._me
+
+    @property
+    def capabilities(self) -> frozenset[str]:
+        """Features the server has beyond the base API (e.g. "read.as_of_lag", "lookup"). The SDK
+        uses each only where it exists, and does the same work locally otherwise."""
+        if self._capabilities is None:
+            self._capabilities = frozenset(errors.call(self._transport.server_info).capabilities)
+        return self._capabilities
 
     @property
     def organization(self) -> str:

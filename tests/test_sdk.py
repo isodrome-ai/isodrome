@@ -9,7 +9,7 @@ import pytest
 from fakes import KEY
 
 import isodrome as iso
-from isodrome.query import Query
+from isodrome.query import Query, _Read
 from isodrome.v1 import isodrome_pb2 as pb
 
 T = pd.Timestamp
@@ -134,7 +134,7 @@ def versions(monkeypatch):
 
     def fake_read(self, request):
         holder["request"] = request
-        return holder["table"], (len(holder["table"]),), 0
+        return _Read(table=holder["table"], position=(len(holder["table"]),))
 
     monkeypatch.setattr(Query, "_read", fake_read)
 
@@ -263,3 +263,76 @@ def test_connect_without_a_login():
 @pytest.fixture
 def iso_cli_login(iso):
     assert iso("login", "--api-key", KEY, key=False).exit_code == 0
+
+
+# ---------- Where the server can do it ----------
+
+
+def test_as_of_lag_goes_to_the_server_where_it_can(client, fake):
+    fake.capabilities = ["read.as_of_lag"]
+    client.create_feed("t")
+    feed = client.feed("t")
+    feed.query(as_of_lag="24h", basis="published", dedupe=["_key", "_event_time"], order="publication",
+               where=iso.col("price") > 1, limit=3).fetch()
+    r = fake.last_read
+    assert (r.as_of_lag_ns, r.as_of_basis) == (24 * 3600 * 10**9, pb.AS_OF_BASIS_PUBLISHED)
+    assert list(r.dedupe.columns) == ["_key", "_event_time"] and r.limit == 3 and r.filters[0].column == "price"
+    feed.query(as_of_lag="1h").at((5,)).fetch()   # pinning works on the server
+    assert list(fake.last_read.at_position.next_offsets) == [5]
+
+
+def test_as_of_join_uses_the_servers_lookup(client, fake):
+    fake.capabilities = ["lookup"]
+    client.create_feed("t")
+    left = pd.DataFrame({
+        "at": pd.to_datetime(["2026-10-16T09:00Z", "2026-10-16T10:00Z", "2026-10-16T11:00Z"]),
+        "station": ["dub", "cork", "dub"],
+    })
+    out = iso.as_of_join(left, client.feed("t").query(where={"kind": "x"}), at="at", key="station",
+                         basis="received", columns=["value"])
+    lookup = fake.last_lookup
+    probes = pa.ipc.open_stream(lookup.probe_batch.ipc).read_all()
+    assert probes.column("_key").to_pylist() == ["dub", "cork", "dub"]
+    assert probes.column("_at").to_pylist()[0] == T("2026-10-16T09:00", tz="UTC")
+    assert lookup.as_of_basis == pb.AS_OF_BASIS_RECEIVED and lookup.filters[0].column == "kind"
+    assert list(lookup.columns) == ["_event_time", "_published_time", "_receive_time", "value"]
+    # Rows back in the left's order, whatever order they came in; no answer means missing.
+    assert out["value"].tolist()[:2] == [0.0, 1.0] and pd.isna(out["value"].iloc[2])
+    assert out["_event_time"].iloc[1] == T("2026-10-16T10:00", tz="UTC")
+
+
+def test_as_of_join_runs_locally_when_lookup_cannot_express_the_query(client, fake, versions):
+    fake.capabilities = ["lookup"]
+    client.create_feed("t")
+    versions(OBSERVATIONS)
+    left = pd.DataFrame({"at": pd.to_datetime(["2026-10-16T10:30Z"]), "station": ["dub"]})
+    out = iso.as_of_join(left, client.feed("t").query(since="30d"), at="at", key="station", columns=["value"])
+    assert out["value"].tolist() == [11.0] and not hasattr(fake, "last_lookup")
+
+
+def test_read_estimates_and_large_read_warnings(client, fake):
+    fake.capabilities = ["read.estimate"]
+    fake.estimate = (700_000, 237_000_000)
+    client.create_feed("t")
+    feed = client.feed("t")
+    assert feed.query().estimate() == {"rows": 700_000, "bytes": 237_000_000}
+    assert fake.last_read.estimate_only
+    with pytest.warns(iso.LargeReadWarning, match="237 MB"):
+        result = feed.query().fetch()
+    assert result.estimate["rows"] == 700_000
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        feed.query(columns=["price"]).fetch()   # columns chosen: no warning
+
+
+def test_feeds_say_how_fresh_they_are(client, fake):
+    fake.capabilities = ["feeds.freshness"]
+    fake.add_public_feed()
+    stats = fake.feeds[("isodrome/public", "forecasts")].stats
+    stats.last_receive_time_ns = _ns("2026-10-16T09:00")
+    stats.events_flushed = 42
+    listed = client.feeds(public=True).to_df()
+    row = listed[listed["feed"] == "isodrome/public/forecasts"].iloc[0]
+    assert row["events"] == 42 and row["last received"] == T("2026-10-16T09:00", tz="UTC")

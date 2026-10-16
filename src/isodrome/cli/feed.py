@@ -212,11 +212,13 @@ def feed_list(ctx: Context, namespace, public_only, mine, deleted, fmt) -> None:
             if public_only and not f.public:
                 continue
             ours = f.organization in ("", me.organization)
+            received = f.stats.last_receive_time_ns
             row = {
                 "feed": ctx.display_ref(f.organization, f.namespace, f.name),
                 "access": "org" if not f.public else "public" if ours else "public, read-only",
                 "key": f.key_field if f.HasField("key_field") and f.key_field else "-",
                 "time": "(arrival)" if f.arrival_time else f.time_field,
+                "last received": _ago(received) if received else "-",
                 "description": f.description,
             }
             if deleted:
@@ -407,6 +409,15 @@ def _example_event(f: pb.Feed) -> dict:
     return example
 
 
+def _ago(ns: int) -> str:
+    """How long ago, roughly: "45s ago", "3h ago", "12d ago"."""
+    seconds = max((now_ns() - ns) / 1e9, 0)
+    for unit, size in (("d", 86400), ("h", 3600), ("m", 60)):
+        if seconds >= size:
+            return f"{seconds / size:.0f}{unit} ago"
+    return f"{seconds:.0f}s ago"
+
+
 def _indent(detail: str, by: int = 4) -> str:
     """Text that may span lines (e.g. a JSON error with a caret), indented to stay under its label."""
     return ("\n" + " " * by).join(line.expandtabs(4) for line in detail.strip().splitlines() if line.strip())
@@ -538,8 +549,11 @@ def feed_push(ctx: Context, name, namespace, data, files, batch_size, quiet) -> 
 @click.option("--end", help="Exclusive end of event time.")
 @click.option("--as-of", help="Only what had been received by then: replays what was known at that moment.")
 @click.option(
+    "--as-of-lag", help="Each event as known this long before its own time, e.g. 24h (a forecast a day ahead)."
+)
+@click.option(
     "--as-of-basis", type=click.Choice(list(AS_OF_BASES)), default="received", show_default=True,
-    help="With --as-of: what Isodrome had received, or what the source had published, by then.",
+    help="With --as-of or --as-of-lag: what Isodrome had received, or what the source had published.",
 )
 @where_option
 @column_option
@@ -552,7 +566,7 @@ def feed_push(ctx: Context, name, namespace, data, files, batch_size, quiet) -> 
 @format_option
 @pass_context
 def feed_query(
-    ctx: Context, name, namespace, since, start, end, as_of, as_of_basis, filters, columns, limit, payload, count,
+    ctx: Context, name, namespace, since, start, end, as_of, as_of_lag, as_of_basis, filters, columns, limit, payload, count,
     at_position, system, dedupe, keep, dedupe_order, fmt,
 ) -> None:
     """Read a feed's events by event time, filters and as-of."""
@@ -572,6 +586,11 @@ def feed_query(
         request.end_event_time_ns = _value(parse_time, end, "--end")
     if as_of:
         request.as_of_ns = _value(parse_time, as_of, "--as-of")
+    if as_of_lag:
+        if "read.as_of_lag" not in ctx.client(require_key=False).server_info().capabilities:
+            raise click.ClickException("this server does not support --as-of-lag (the Python SDK can do it locally)")
+        request.as_of_lag_ns = _value(parse_duration, as_of_lag, "--as-of-lag")
+    if as_of or as_of_lag:
         request.as_of_basis = AS_OF_BASES[as_of_basis]
     if at_position:
         request.at_position.CopyFrom(_value(parse_position, at_position, "--at-position"))

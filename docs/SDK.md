@@ -1,6 +1,7 @@
 # Proposal: the `isodrome` Python SDK
 
-Status: phases 1 and 2 **built** (see [Plan](#plan)); this document is now the design record.
+Status: phases 1 and 2 **built**, phase 3 partly (see [Plan](#plan)); this document is now the
+design record.
 Covers the interface for data exploration in notebooks, the demo that proves it
 (`examples/forecast_verification.ipynb`), and how it leads to transformers.
 
@@ -35,7 +36,8 @@ Two consequences for the design:
 
 - **Choosing columns is the big lever (20× less data).** The interface makes it natural, and
   shows the size of a read in progress.
-- **Point-in-time questions are not one server call yet.** "Each model's forecast for every
+- **Point-in-time questions were not one server call** (now they are: see
+  [Server work](#server-work-this-needed)). "Each model's forecast for every
   hour, as it stood 24 hours before" needs every version, then a local per-row filter (see
   [Time](#time-the-three-clocks)). It works today (the prototype scored the models: 24-hour MAE
   ECMWF IFS 0.99 °C, AIFS 0.82 °C, GFS 0.74 °C at Dublin Airport); a server addition would push
@@ -173,7 +175,7 @@ time, falling back to receive time, as the server does), then de-duplicates (`as
 matches each row with pandas' `merge_asof` (`as_of_join`). Filters that could otherwise bring
 back a superseded version are applied after de-duplication, as on the server. That is correct,
 but downloads every version; phase 3 asks the server to do it (see
-[Server work](#server-work-this-needs)).
+[Server work](#server-work-this-needed)).
 
 ### Latest and live
 
@@ -282,19 +284,25 @@ Dependencies: `grpcio`, `protobuf`, `pyarrow` and `pandas`. Extras: `isodrome[po
 |---|---|---|
 | 1 | **Built.** `connect`, `feeds`, `feed`, `Query` (all server options), `Result` with conversions, positions and attribution, `latest`, `versions`, errors, Jupyter reprs. (Not yet: the CLI's `query`/`latest` rebuilt on it.) | the bulk |
 | 2 | **Built.** Local point-in-time (`as_of_lag=`, `as_of_join`), `tail`/`subscribe`/`subscribe_async`/`watch`, `push` from frames; the demo notebook | medium |
-| 3 | Server push-down for per-row as-of; local cache of position-pinned reads; async client | depends on the server |
+| 3 | **Partly built.** Server push-down: `as_of_lag` (`read.as_of_lag`), `as_of_join` (`lookup`), read estimates with large-read warnings and progress (`read.estimate`), feed freshness (`feeds.freshness`), each used only where the server lists it, with the local code as the fallback. Still to do: a local cache of position-pinned reads, a full async client | |
 | 4 | Transformer descriptor, `backtest`, deploy | after transformers exist on the server |
 
-## Server work this needs
+## Server work this needed
 
-1. **Per-row as-of in `Read`** (phase 3): an `as_of_lag` ("each event as known this long before
-   its own event time") and, more generally, an as-of join against a supplied set of
-   (key, time) rows. Without it, point-in-time questions download every version.
-2. **Read size up front:** an estimate of rows and bytes before streaming (or the total in the
-   first message), so the progress bar is honest.
-3. **Fix the cross-organization crashes** already reported (`UNKNOWN: Stream removed`), which
-   the SDK would surface as unhelpful errors.
-4. Later, for transformers: a way to declare and run user code against queries.
+Done in isodrome-server `45cf1b4`, and used by the SDK where `ServerInfo.capabilities` lists it:
+
+1. **Per-row as-of in `Read`** (`as_of_lag_ns`, capability `read.as_of_lag`).
+2. **Point-in-time `Lookup`** for (key, time) probes (`lookup`), behind `iso.as_of_join` when the
+   query has no time window or as-of of its own.
+3. **Read size up front** (`estimated_rows`, `estimated_bytes`, `estimate_only`;
+   `read.estimate`): `Query.estimate()`, a `LargeReadWarning` for big reads of every column,
+   and a progress bar when `tqdm` is installed.
+4. **Feed freshness** (`last_event_time_ns`, `last_receive_time_ns`, `last_published_time_ns`;
+   `feeds.freshness`).
+5. **Intact gRPC errors through staging's proxy.**
+
+An end-to-end test checks that the server and the SDK's local code give identical answers.
+Later, for transformers: a way to declare and run user code against queries.
 
 ## Decisions (taken)
 
