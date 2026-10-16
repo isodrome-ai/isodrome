@@ -47,12 +47,17 @@ def parse_time(text: str) -> int:
         return now_ns()
     if re.fullmatch(r"-?\d+", text):
         return int(text)
-    match = re.fullmatch(r"(.+?T\d\d:\d\d:\d\d)(?:\.(\d{1,9}))?(Z|[+-]\d\d:?\d\d)?", text, re.IGNORECASE)
+    match = re.fullmatch(
+        r"(\d{4}-\d\d-\d\d)[T ](\d\d:\d\d)(:\d\d)?(?:\.(\d{1,9}))?(Z|[+-]\d\d:?\d\d)?", text, re.IGNORECASE
+    )
     try:
         if match:
-            base, fraction, zone = match.groups()
+            day, minutes, secs, fraction, zone = match.groups()
             zone = "+00:00" if zone in (None, "Z", "z") else zone
-            seconds = datetime.fromisoformat(base + zone)
+            if ":" not in zone:
+                zone = zone[:3] + ":" + zone[3:]
+            # Spelled out for Python 3.10, whose fromisoformat needs seconds and a colon in the zone.
+            seconds = datetime.fromisoformat(f"{day}T{minutes}{secs or ':00'}{zone}")
             nanos = int((fraction or "").ljust(9, "0"))
             return int(seconds.timestamp()) * 1_000_000_000 + nanos
         day = datetime.fromisoformat(text)
