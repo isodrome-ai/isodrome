@@ -1,7 +1,8 @@
 # Proposal: the `isodrome` Python SDK
 
-Status: **proposal**, for discussion before building. Covers the interface for data exploration
-in notebooks, the demo that proves it, and how it leads to transformers.
+Status: phases 1 and 2 **built** (see [Plan](#plan)); this document is now the design record.
+Covers the interface for data exploration in notebooks, the demo that proves it
+(`examples/forecast_verification.ipynb`), and how it leads to transformers.
 
 ## Why now
 
@@ -44,8 +45,9 @@ Two consequences for the design:
 
 1. **Notebook first.** Every object has a useful `repr` in Jupyter (feeds, schemas, results), and
    a result shows its data's attribution.
-2. **Arrow inside, your frame outside.** Results are Arrow; `.to_pandas()` and `.to_polars()`
-   convert without copies where possible. pandas and polars are optional extras.
+2. **pandas by default, Arrow inside.** `.to_df()` gives a pandas DataFrame (UTC timestamps to
+   the nanosecond), everywhere a result can be had. `.to_arrow()` and `.to_polars()` (an
+   optional extra) are there too.
 3. **Time is explicit.** Every time argument takes a `datetime`, a pandas `Timestamp`, an
    RFC 3339 string, integer nanoseconds or a relative string (`"1h"`). Every result keeps
    `_event_time`, `_published_time` and `_receive_time` available. `as_of` always names its
@@ -105,7 +107,7 @@ q = forecast.query(
 q = q.where(iso.col("t2m_k") > 283.15)           # chaining returns a new query
 q                                                # repr: the request, in words
 
-df = q.to_polars()                               # or .to_pandas(), .to_arrow(), .count()
+df = q.to_df()                                   # pandas; or .to_arrow(), .to_polars(), .count()
 ```
 
 - **Filters** map onto the server's structured filters: `iso.col(name)` supports `==`, `!=`,
@@ -124,12 +126,12 @@ df = q.to_polars()                               # or .to_pandas(), .to_arrow(),
 
 ```python
 r = q.fetch()
-r.to_polars(); r.to_pandas(); r.to_arrow()
+r.to_df(); r.to_arrow(); r.to_polars()
 r.position          # where in the feed's log this read ended
 r.attribution       # credit to show with the data; Result's repr shows it under the table
 r.server_ms         # time the server spent
 
-again = q.at(r.position).to_polars()   # the same events, whatever has arrived since
+again = q.at(r.position).to_df()   # the same events, whatever has arrived since
 ```
 
 `Result` renders in Jupyter as the first rows, the shape, the time range covered, and the
@@ -150,7 +152,7 @@ forecast.query(as_of="2026-10-15T09:00Z", basis="published")  # what the source 
 forecast.query(dedupe=["_key", "_event_time"], keep="last", order="publication")
 
 # Every version, with all three times: the raw material for point-in-time work.
-forecast.versions(since="7d", where={"_key": "dublin-airport"})
+forecast.versions(since="7d", where={"_key": "dublin-airport"}).to_df()
 ```
 
 **Point-in-time per row** answers questions where "as of" differs per row, such as "the forecast
@@ -166,9 +168,11 @@ forecast.query(since="7d", as_of_lag="24h", basis="published", dedupe=["_key", "
 iso.as_of_join(left=trades, right=forecast, on="_key", at="trade_time", basis="published")
 ```
 
-Phase 2 implements both locally: fetch the versions, filter `_published_time <= at`
-(falling back to `_receive_time`, as the server does), keep the last per key with Polars'
-`join_asof`. That is correct, but downloads every version. Phase 3 asks the server to do it (see
+Both run locally today: the SDK reads the versions, keeps those known in time (publication
+time, falling back to receive time, as the server does), then de-duplicates (`as_of_lag`) or
+matches each row with pandas' `merge_asof` (`as_of_join`). Filters that could otherwise bring
+back a superseded version are applied after de-duplication, as on the server. That is correct,
+but downloads every version; phase 3 asks the server to do it (see
 [Server work](#server-work-this-needs)).
 
 ### Latest and live
@@ -178,9 +182,11 @@ forecast.latest()                                   # newest event per key
 forecast.latest(keys=["dublin-airport"], columns=["t2m_k"])
 
 for batch in forecast.tail(last=10):                # history, then live; Ctrl-C (or break) stops
-    print(batch.to_polars())
+    print(batch.to_df())
 
-async for batch in forecast.subscribe(start="beginning", speed=50):   # replay, paced
+for batch in forecast.subscribe(start="beginning", speed=50, follow=False):   # replay, paced
+    ...
+async for batch in forecast.subscribe_async(last=10):   # the same, for asyncio code
     ...
 
 forecast.watch(columns=["_key", "t2m_k"])           # Jupyter: a table that updates in place
@@ -256,25 +262,26 @@ server.
 
 ```
 isodrome/
-  __init__.py      connect, feed, feeds, col, as_of_join, exceptions, transformer (later)
-  client.py        Client (exists: connection, auth); gains feeds(), feed(), namespaces()
-  feed.py          Feed: metadata, query(), versions(), latest(), tail(), subscribe(), push()
-  query.py         Query (immutable, serialisable), expressions (col)
-  result.py        Result, conversions, Jupyter reprs
-  pit.py           point-in-time helpers (local, Polars)
-  cli/             unchanged; gradually rebuilt on the SDK
+  __init__.py      connect, feed, feeds, namespaces, col, as_of_join, exceptions
+  client.py        Client: whoami, feeds(), feed(), namespaces(), create_feed()
+  _feed.py         Feed: metadata, query(), versions(), latest(), tail(), subscribe(), watch(), push()
+  query.py         Query (immutable, serialisable with to_dict()), col() expressions
+  result.py        Result: to_df(), to_arrow(), to_polars(), position, attribution, Jupyter repr
+  pit.py           as_of_join (pandas merge_asof)
+  errors.py        typed exceptions, retries
+  _transport.py    the gRPC connection (shared with the CLI)
+  cli/             the `iso` command
 ```
 
-Dependencies: `grpcio`, `protobuf` and `pyarrow` (as now). Extras: `isodrome[pandas]`,
-`isodrome[polars]`, and `isodrome[notebook]` (both, plus `tqdm` and `ipywidgets` for progress and
-`watch`).
+Dependencies: `grpcio`, `protobuf`, `pyarrow` and `pandas`. Extras: `isodrome[polars]` and
+`isodrome[notebook]` (Jupyter and matplotlib, for the examples).
 
 ## Plan
 
 | Phase | What | Rough size |
 |---|---|---|
-| 1 | `connect`, `feeds`, `feed`, `Query` (all server options), `Result` with conversions, positions and attribution, `latest`, `versions`, errors, Jupyter reprs; the CLI's `query`/`latest` rebuilt on it | the bulk |
-| 2 | Local point-in-time (`as_of_lag=`, `as_of_join`), `tail`/`subscribe`/`watch`, `push` from frames; the demo notebook | medium |
+| 1 | **Built.** `connect`, `feeds`, `feed`, `Query` (all server options), `Result` with conversions, positions and attribution, `latest`, `versions`, errors, Jupyter reprs. (Not yet: the CLI's `query`/`latest` rebuilt on it.) | the bulk |
+| 2 | **Built.** Local point-in-time (`as_of_lag=`, `as_of_join`), `tail`/`subscribe`/`subscribe_async`/`watch`, `push` from frames; the demo notebook | medium |
 | 3 | Server push-down for per-row as-of; local cache of position-pinned reads; async client | depends on the server |
 | 4 | Transformer descriptor, `backtest`, deploy | after transformers exist on the server |
 
@@ -289,13 +296,10 @@ Dependencies: `grpcio`, `protobuf` and `pyarrow` (as now). Extras: `isodrome[pan
    the SDK would surface as unhelpful errors.
 4. Later, for transformers: a way to declare and run user code against queries.
 
-## Decisions for you
+## Decisions (taken)
 
-1. **Default frame library.** Proposal: no default; `to_polars()` and `to_pandas()` side by
-   side, and the demo in Polars (faster, and `join_asof` is the point-in-time workhorse).
-2. **Sync or async first.** Proposal: sync (notebooks), with `subscribe` also as an async
-   iterator; a full async client in phase 3.
-3. **Naming the per-row as-of.** Proposal: `as_of_lag="24h"`, matching the server field it will
-   map to. The alternative, `known="24h before"`, reads well but is a mini-language.
-4. **Where the demo lives.** Proposal: `examples/` in this repository, run in CI against staging
-   (it doubles as an end-to-end test of the public feeds).
+1. **pandas** is the default: `.to_df()` returns a pandas DataFrame everywhere; Arrow and Polars
+   are available.
+2. **Sync first**; `subscribe_async` for asyncio code; a full async client later.
+3. **`as_of_lag=`** names the per-row as-of, matching the server field it will map to.
+4. **The demo** lives in `examples/` and runs in CI against staging when a key is configured.

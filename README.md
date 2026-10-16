@@ -27,6 +27,29 @@ as-of queries), and with `--key FIELD` keeps the newest event per key for `iso f
 JSON array, or one object) or standard input, and prints every rejected event and why. Pushing
 the same file twice is recognised and not written twice (within the server's 15-minute window).
 
+## In Python
+
+```python
+import isodrome as iso
+
+client = iso.connect()                           # uses what `iso login` saved
+client.feeds(public=True)                        # a table in Jupyter
+obs = client.feed("isodrome/public/met_eireann_observations")
+
+df = obs.query(since="7d", where={"_key": "dublin-airport"}, columns=["_event_time", "temperature_c"]).to_df()
+
+forecast = client.feed("isodrome/public/ecmwf_open_data_forecast")
+forecast.query(as_of="2026-10-15T09:00Z", basis="published",          # what had been published then,
+               dedupe=["_key", "_event_time"], order="publication")   # one version per hour
+forecast.query(as_of_lag="24h", basis="published", dedupe=["_key", "_event_time"])  # each hour, a day ahead
+iso.as_of_join(trades, obs, at="time", key="station")                 # each row with what was known then
+```
+
+Results are pandas DataFrames (`.to_df()`; also `.to_arrow()`, `.to_polars()`), carry the
+position they were read at (`query.at(result.position)` repeats a read exactly) and the data's
+attribution. [`examples/forecast_verification.ipynb`](examples/forecast_verification.ipynb)
+scores four weather models against observations, without look-ahead; `docs/SDK.md` is the design.
+
 ## Commands
 
 | Command | What it does |
@@ -39,7 +62,7 @@ the same file twice is recognised and not written twice (within the server's 15-
 | `iso feed push` / `query` / `tail` / `latest` | send and read events; `-o table\|json\|csv` |
 | `iso key create` / `list` / `revoke` | API keys (personal by default, or for a service account); your sessions |
 | `iso service-account create` / `list` / `delete` | identities for software (CI, services), with keys of their own |
-| `iso connector templates`, `iso connection create` / `list` / `show` / `pause` / `resume` / `delete` | Isodrome-run downloaders that fill feeds from outside sources |
+| `iso connector templates`, `iso connection create` / `list` / `show` / `credentials` / `pause` / `resume` / `delete` | Isodrome-run downloaders that fill feeds from outside sources |
 
 `iso <command> --help` describes each one.
 
@@ -78,6 +101,7 @@ iso profile use local          # or pass --profile local per command
 python -m venv .venv && . .venv/bin/activate
 pip install -e '.[dev]'
 pytest                                       # unit tests, against an in-process fake server
+pip install -e '.[dev,notebook]'             # to run the example notebook
 ```
 
 **The API client** in `src/isodrome/v1` is generated from `proto/isodrome/v1/isodrome.proto`,

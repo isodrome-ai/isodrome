@@ -11,7 +11,7 @@ import grpc
 
 from isodrome import login as device_flow
 from isodrome.cli.context import Context, pass_context, warn_on_version_mismatch
-from isodrome.client import key_id
+from isodrome._transport import key_id
 from isodrome.config import config_path
 from isodrome.parse import format_ns, short_enum
 from isodrome.v1 import isodrome_pb2 as pb

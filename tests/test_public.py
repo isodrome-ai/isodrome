@@ -131,3 +131,13 @@ def test_connectors(iso, fake):
     created = iso("connection", "create", "dublin", "--template", "met_eireann.point_forecast", "--paused")
     assert created.exit_code == 0 and "service account connection-dublin" in created.output
     assert "dublin" in iso("connection", "list").output
+
+
+def test_connection_credentials_come_from_a_file(iso, fake, tmp_path):
+    creds = tmp_path / "creds.json"
+    creds.write_text('{"api_key": "k", "api_secret": "s"}')
+    created = iso("connection", "create", "ex", "--template", "met_eireann.point_forecast", "--credentials", str(creds))
+    assert created.exit_code == 0 and "credentials: api_key, api_secret" in created.output
+    assert iso("connection", "credentials", "ex", "--from", "-", input='{"api_key": "k2"}').exit_code == 0
+    assert list(fake.connections[0].credential_fields) == ["api_key"]
+    assert iso("connection", "credentials", "ex", "--from", "-", input='{"n": 1}').exit_code == 2

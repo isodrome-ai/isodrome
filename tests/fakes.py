@@ -128,8 +128,16 @@ class FakeIsodrome(pb_grpc.IsodromeServicer):
             name=request.name, template=request.template, namespace=request.namespace or "default",
             options_json=request.options_json or "{}", status="paused" if request.paused else "pending",
             paused=request.paused, service_account=f"connection-{request.name}", feeds=["forecast"],
+            credential_fields=sorted(json.loads(request.credentials_json)) if request.credentials_json else [],
         )
         self.connections.append(c)
+        return c
+
+    def SetConnectionCredentials(self, request, context):
+        self._auth(context)
+        c = next(c for c in self.connections if c.name == request.name)
+        del c.credential_fields[:]
+        c.credential_fields.extend(sorted(json.loads(request.credentials_json)))
         return c
 
     def ListConnections(self, request, context):

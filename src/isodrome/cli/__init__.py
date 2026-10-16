@@ -17,7 +17,7 @@ from isodrome.cli.connector import connection, connector
 from isodrome.cli.context import Context, Group, warn_on_version_mismatch
 from isodrome.cli.feed import feed
 from isodrome.cli.tenancy import key, namespace, service_account
-from isodrome.client import API_VERSION, Client
+from isodrome._transport import API_VERSION, Transport
 from isodrome.config import Config
 
 
@@ -30,7 +30,7 @@ def _print_version(ctx: click.Context, _param, value: bool) -> None:
     config = Config.load()
     endpoint = params.get("endpoint") or config.profile(params.get("profile")).endpoint
     try:
-        with Client(endpoint) as client:
+        with Transport(endpoint) as client:
             info = client.server_info(timeout=3)
         click.echo(f"server {info.version} (API {info.api_version}) at {endpoint}")
         warn_on_version_mismatch(info)

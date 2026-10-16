@@ -54,6 +54,9 @@ service Isodrome {
   rpc GetConnection(GetConnectionRequest) returns (Connection);
   rpc PauseConnection(PauseConnectionRequest) returns (Connection);
   rpc ResumeConnection(ResumeConnectionRequest) returns (Connection);
+  // Replaces a connection's credentials (for templates that need the owner's own account with
+  // the source). Write-only: credentials are never returned. The connection restarts with them.
+  rpc SetConnectionCredentials(SetConnectionCredentialsRequest) returns (Connection);
   // Stops it and deletes its service account. Its feeds and their data stay.
   rpc DeleteConnection(DeleteConnectionRequest) returns (DeleteConnectionResponse);
 
@@ -213,7 +216,7 @@ enum ColumnType {
 message Column {
   string name = 1;              // dotted path for nested fields, e.g. "pitch.velocity"
   ColumnType type = 2;
-  int64 first_seen_ns = 3;      // receive time of the first event that contained it
+  int64 first_seen_ns = 3;      // receive time of the first event that contained it; 0 until that event is flushed
 }
 
 message FeedStats {
@@ -538,6 +541,12 @@ message ConnectorTemplate {
   string options_example = 4;        // JSON
   repeated ConnectorFeed feeds = 5;  // the feeds a connection creates
   int64 poll_interval_ms = 6;
+  // Credentials a connection must be given (e.g. an exchange API key); empty for open data.
+  repeated ConnectorCredential credentials = 7;
+}
+message ConnectorCredential {
+  string name = 1;                   // the key in credentials_json
+  string description = 2;
 }
 message ConnectorFeed {
   string name = 1;
@@ -570,6 +579,8 @@ message Connection {
   int64 events_sent = 14;
   int64 created_at_ns = 15;
   repeated string feeds = 16;
+  repeated string credential_fields = 17;  // the credentials given (names only, never values)
+  int64 credentials_set_at_ns = 18;  // 0: none
 }
 message CreateConnectionRequest {
   string name = 1;                   // ^[a-z][a-z0-9_-]{0,62}$, unique in the organization
@@ -577,6 +588,13 @@ message CreateConnectionRequest {
   string namespace = 3;              // empty: the credential's default namespace
   string options_json = 4;           // empty: the template's defaults
   bool paused = 5;                   // create without starting it
+  // The template's credentials as a JSON object of strings (see ConnectorTemplate.credentials).
+  // Stored encrypted; never returned.
+  string credentials_json = 6;
+}
+message SetConnectionCredentialsRequest {
+  string name = 1;
+  string credentials_json = 2;
 }
 message ListConnectionsRequest {}
 message ListConnectionsResponse { repeated Connection connections = 1; }

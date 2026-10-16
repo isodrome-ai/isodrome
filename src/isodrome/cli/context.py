@@ -7,7 +7,7 @@ import os
 import click
 import grpc
 
-from isodrome.client import API_VERSION, Client
+from isodrome._transport import API_VERSION, Transport
 from isodrome.config import Config, Profile
 from isodrome.v1 import isodrome_pb2 as pb
 
@@ -24,7 +24,7 @@ class Context:
         self.profile_name = profile or self.config.current
         self.endpoint_override = endpoint
         self.api_key_override = api_key
-        self._client: Client | None = None
+        self._client: Transport | None = None
         self._me: pb.WhoAmIResponse | None = None
 
     @property
@@ -39,7 +39,7 @@ class Context:
     def api_key(self) -> str | None:
         return self.api_key_override or self.profile.api_key
 
-    def client(self, require_key: bool = True) -> Client:
+    def client(self, require_key: bool = True) -> Transport:
         if require_key and not self.api_key:
             raise click.ClickException(
                 f"not logged in (profile {self.profile_name!r}); run `iso login`"
@@ -47,7 +47,7 @@ class Context:
             )
         if self._client is None:
             try:
-                self._client = Client(self.endpoint, self.api_key)
+                self._client = Transport(self.endpoint, self.api_key)
             except ValueError as e:
                 raise click.ClickException(str(e)) from None
         return self._client

@@ -768,20 +768,30 @@ class SubscribeResponse(_message.Message):
     def __init__(self, batch: _Optional[_Union[ArrowBatch, _Mapping]] = ..., caught_up: _Optional[_Union[CaughtUp, _Mapping]] = ..., heartbeat: _Optional[_Union[Heartbeat, _Mapping]] = ...) -> None: ...
 
 class ConnectorTemplate(_message.Message):
-    __slots__ = ("name", "version", "description", "options_example", "feeds", "poll_interval_ms")
+    __slots__ = ("name", "version", "description", "options_example", "feeds", "poll_interval_ms", "credentials")
     NAME_FIELD_NUMBER: _ClassVar[int]
     VERSION_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
     OPTIONS_EXAMPLE_FIELD_NUMBER: _ClassVar[int]
     FEEDS_FIELD_NUMBER: _ClassVar[int]
     POLL_INTERVAL_MS_FIELD_NUMBER: _ClassVar[int]
+    CREDENTIALS_FIELD_NUMBER: _ClassVar[int]
     name: str
     version: int
     description: str
     options_example: str
     feeds: _containers.RepeatedCompositeFieldContainer[ConnectorFeed]
     poll_interval_ms: int
-    def __init__(self, name: _Optional[str] = ..., version: _Optional[int] = ..., description: _Optional[str] = ..., options_example: _Optional[str] = ..., feeds: _Optional[_Iterable[_Union[ConnectorFeed, _Mapping]]] = ..., poll_interval_ms: _Optional[int] = ...) -> None: ...
+    credentials: _containers.RepeatedCompositeFieldContainer[ConnectorCredential]
+    def __init__(self, name: _Optional[str] = ..., version: _Optional[int] = ..., description: _Optional[str] = ..., options_example: _Optional[str] = ..., feeds: _Optional[_Iterable[_Union[ConnectorFeed, _Mapping]]] = ..., poll_interval_ms: _Optional[int] = ..., credentials: _Optional[_Iterable[_Union[ConnectorCredential, _Mapping]]] = ...) -> None: ...
+
+class ConnectorCredential(_message.Message):
+    __slots__ = ("name", "description")
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    description: str
+    def __init__(self, name: _Optional[str] = ..., description: _Optional[str] = ...) -> None: ...
 
 class ConnectorFeed(_message.Message):
     __slots__ = ("name", "key_field", "time_field", "publication_time_field", "description", "licence", "attribution", "source_url")
@@ -814,7 +824,7 @@ class ListConnectorTemplatesResponse(_message.Message):
     def __init__(self, templates: _Optional[_Iterable[_Union[ConnectorTemplate, _Mapping]]] = ...) -> None: ...
 
 class Connection(_message.Message):
-    __slots__ = ("id", "name", "template", "namespace", "options_json", "service_account", "paused", "status", "status_detail", "cursor_json", "worker", "last_heartbeat_at_ns", "last_event_at_ns", "events_sent", "created_at_ns", "feeds")
+    __slots__ = ("id", "name", "template", "namespace", "options_json", "service_account", "paused", "status", "status_detail", "cursor_json", "worker", "last_heartbeat_at_ns", "last_event_at_ns", "events_sent", "created_at_ns", "feeds", "credential_fields", "credentials_set_at_ns")
     ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     TEMPLATE_FIELD_NUMBER: _ClassVar[int]
@@ -831,6 +841,8 @@ class Connection(_message.Message):
     EVENTS_SENT_FIELD_NUMBER: _ClassVar[int]
     CREATED_AT_NS_FIELD_NUMBER: _ClassVar[int]
     FEEDS_FIELD_NUMBER: _ClassVar[int]
+    CREDENTIAL_FIELDS_FIELD_NUMBER: _ClassVar[int]
+    CREDENTIALS_SET_AT_NS_FIELD_NUMBER: _ClassVar[int]
     id: str
     name: str
     template: str
@@ -847,21 +859,33 @@ class Connection(_message.Message):
     events_sent: int
     created_at_ns: int
     feeds: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., template: _Optional[str] = ..., namespace: _Optional[str] = ..., options_json: _Optional[str] = ..., service_account: _Optional[str] = ..., paused: bool = ..., status: _Optional[str] = ..., status_detail: _Optional[str] = ..., cursor_json: _Optional[str] = ..., worker: _Optional[str] = ..., last_heartbeat_at_ns: _Optional[int] = ..., last_event_at_ns: _Optional[int] = ..., events_sent: _Optional[int] = ..., created_at_ns: _Optional[int] = ..., feeds: _Optional[_Iterable[str]] = ...) -> None: ...
+    credential_fields: _containers.RepeatedScalarFieldContainer[str]
+    credentials_set_at_ns: int
+    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., template: _Optional[str] = ..., namespace: _Optional[str] = ..., options_json: _Optional[str] = ..., service_account: _Optional[str] = ..., paused: bool = ..., status: _Optional[str] = ..., status_detail: _Optional[str] = ..., cursor_json: _Optional[str] = ..., worker: _Optional[str] = ..., last_heartbeat_at_ns: _Optional[int] = ..., last_event_at_ns: _Optional[int] = ..., events_sent: _Optional[int] = ..., created_at_ns: _Optional[int] = ..., feeds: _Optional[_Iterable[str]] = ..., credential_fields: _Optional[_Iterable[str]] = ..., credentials_set_at_ns: _Optional[int] = ...) -> None: ...
 
 class CreateConnectionRequest(_message.Message):
-    __slots__ = ("name", "template", "namespace", "options_json", "paused")
+    __slots__ = ("name", "template", "namespace", "options_json", "paused", "credentials_json")
     NAME_FIELD_NUMBER: _ClassVar[int]
     TEMPLATE_FIELD_NUMBER: _ClassVar[int]
     NAMESPACE_FIELD_NUMBER: _ClassVar[int]
     OPTIONS_JSON_FIELD_NUMBER: _ClassVar[int]
     PAUSED_FIELD_NUMBER: _ClassVar[int]
+    CREDENTIALS_JSON_FIELD_NUMBER: _ClassVar[int]
     name: str
     template: str
     namespace: str
     options_json: str
     paused: bool
-    def __init__(self, name: _Optional[str] = ..., template: _Optional[str] = ..., namespace: _Optional[str] = ..., options_json: _Optional[str] = ..., paused: bool = ...) -> None: ...
+    credentials_json: str
+    def __init__(self, name: _Optional[str] = ..., template: _Optional[str] = ..., namespace: _Optional[str] = ..., options_json: _Optional[str] = ..., paused: bool = ..., credentials_json: _Optional[str] = ...) -> None: ...
+
+class SetConnectionCredentialsRequest(_message.Message):
+    __slots__ = ("name", "credentials_json")
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    CREDENTIALS_JSON_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    credentials_json: str
+    def __init__(self, name: _Optional[str] = ..., credentials_json: _Optional[str] = ...) -> None: ...
 
 class ListConnectionsRequest(_message.Message):
     __slots__ = ()
