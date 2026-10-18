@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import click
 
-from isodrome import output
+from isodrome import _output as output
 from isodrome.cli.context import Context, pass_context
 from isodrome.parse import format_ns, now_ns, short_enum
 from isodrome.v1 import isodrome_pb2 as pb

@@ -124,6 +124,21 @@ class IsodromeStub(object):
                 request_serializer=isodrome_dot_v1_dot_isodrome__pb2.UndeleteFeedRequest.SerializeToString,
                 response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.Feed.FromString,
                 _registered_method=True)
+        self.DeclareFeed = channel.unary_unary(
+                '/isodrome.v1.Isodrome/DeclareFeed',
+                request_serializer=isodrome_dot_v1_dot_isodrome__pb2.DeclareFeedRequest.SerializeToString,
+                response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.DeclareFeedResponse.FromString,
+                _registered_method=True)
+        self.SetFeedTag = channel.unary_unary(
+                '/isodrome.v1.Isodrome/SetFeedTag',
+                request_serializer=isodrome_dot_v1_dot_isodrome__pb2.SetFeedTagRequest.SerializeToString,
+                response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.Feed.FromString,
+                _registered_method=True)
+        self.DeleteFeedTag = channel.unary_unary(
+                '/isodrome.v1.Isodrome/DeleteFeedTag',
+                request_serializer=isodrome_dot_v1_dot_isodrome__pb2.DeleteFeedTagRequest.SerializeToString,
+                response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.DeleteFeedTagResponse.FromString,
+                _registered_method=True)
         self.ListRejections = channel.unary_unary(
                 '/isodrome.v1.Isodrome/ListRejections',
                 request_serializer=isodrome_dot_v1_dot_isodrome__pb2.ListRejectionsRequest.SerializeToString,
@@ -193,6 +208,106 @@ class IsodromeStub(object):
                 '/isodrome.v1.Isodrome/Lookup',
                 request_serializer=isodrome_dot_v1_dot_isodrome__pb2.LookupRequest.SerializeToString,
                 response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.LookupResponse.FromString,
+                _registered_method=True)
+        self.SyncFeed = channel.unary_unary(
+                '/isodrome.v1.Isodrome/SyncFeed',
+                request_serializer=isodrome_dot_v1_dot_isodrome__pb2.SyncFeedRequest.SerializeToString,
+                response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.SyncFeedResponse.FromString,
+                _registered_method=True)
+        self.DeployTransformer = channel.unary_unary(
+                '/isodrome.v1.Isodrome/DeployTransformer',
+                request_serializer=isodrome_dot_v1_dot_isodrome__pb2.DeployTransformerRequest.SerializeToString,
+                response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.TransformerBuild.FromString,
+                _registered_method=True)
+        self.UploadBundle = channel.stream_unary(
+                '/isodrome.v1.Isodrome/UploadBundle',
+                request_serializer=isodrome_dot_v1_dot_isodrome__pb2.UploadBundleRequest.SerializeToString,
+                response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.UploadBundleResponse.FromString,
+                _registered_method=True)
+        self.GetTransformerBuild = channel.unary_unary(
+                '/isodrome.v1.Isodrome/GetTransformerBuild',
+                request_serializer=isodrome_dot_v1_dot_isodrome__pb2.GetTransformerBuildRequest.SerializeToString,
+                response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.TransformerBuild.FromString,
+                _registered_method=True)
+        self.ListTransformerBuilds = channel.unary_unary(
+                '/isodrome.v1.Isodrome/ListTransformerBuilds',
+                request_serializer=isodrome_dot_v1_dot_isodrome__pb2.ListTransformerBuildsRequest.SerializeToString,
+                response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.ListTransformerBuildsResponse.FromString,
+                _registered_method=True)
+        self.CancelTransformerBuild = channel.unary_unary(
+                '/isodrome.v1.Isodrome/CancelTransformerBuild',
+                request_serializer=isodrome_dot_v1_dot_isodrome__pb2.CancelTransformerBuildRequest.SerializeToString,
+                response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.TransformerBuild.FromString,
+                _registered_method=True)
+        self.CreatePackageIndex = channel.unary_unary(
+                '/isodrome.v1.Isodrome/CreatePackageIndex',
+                request_serializer=isodrome_dot_v1_dot_isodrome__pb2.CreatePackageIndexRequest.SerializeToString,
+                response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.PackageIndex.FromString,
+                _registered_method=True)
+        self.ListPackageIndexes = channel.unary_unary(
+                '/isodrome.v1.Isodrome/ListPackageIndexes',
+                request_serializer=isodrome_dot_v1_dot_isodrome__pb2.ListPackageIndexesRequest.SerializeToString,
+                response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.ListPackageIndexesResponse.FromString,
+                _registered_method=True)
+        self.SetPackageIndexCredentials = channel.unary_unary(
+                '/isodrome.v1.Isodrome/SetPackageIndexCredentials',
+                request_serializer=isodrome_dot_v1_dot_isodrome__pb2.SetPackageIndexCredentialsRequest.SerializeToString,
+                response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.PackageIndex.FromString,
+                _registered_method=True)
+        self.DeletePackageIndex = channel.unary_unary(
+                '/isodrome.v1.Isodrome/DeletePackageIndex',
+                request_serializer=isodrome_dot_v1_dot_isodrome__pb2.DeletePackageIndexRequest.SerializeToString,
+                response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.DeletePackageIndexResponse.FromString,
+                _registered_method=True)
+        self.ListTransformers = channel.unary_unary(
+                '/isodrome.v1.Isodrome/ListTransformers',
+                request_serializer=isodrome_dot_v1_dot_isodrome__pb2.ListTransformersRequest.SerializeToString,
+                response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.ListTransformersResponse.FromString,
+                _registered_method=True)
+        self.GetTransformer = channel.unary_unary(
+                '/isodrome.v1.Isodrome/GetTransformer',
+                request_serializer=isodrome_dot_v1_dot_isodrome__pb2.GetTransformerRequest.SerializeToString,
+                response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.Transformer.FromString,
+                _registered_method=True)
+        self.PauseTransformer = channel.unary_unary(
+                '/isodrome.v1.Isodrome/PauseTransformer',
+                request_serializer=isodrome_dot_v1_dot_isodrome__pb2.PauseTransformerRequest.SerializeToString,
+                response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.Transformer.FromString,
+                _registered_method=True)
+        self.ResumeTransformer = channel.unary_unary(
+                '/isodrome.v1.Isodrome/ResumeTransformer',
+                request_serializer=isodrome_dot_v1_dot_isodrome__pb2.ResumeTransformerRequest.SerializeToString,
+                response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.Transformer.FromString,
+                _registered_method=True)
+        self.DeleteTransformer = channel.unary_unary(
+                '/isodrome.v1.Isodrome/DeleteTransformer',
+                request_serializer=isodrome_dot_v1_dot_isodrome__pb2.DeleteTransformerRequest.SerializeToString,
+                response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.DeleteTransformerResponse.FromString,
+                _registered_method=True)
+        self.StartTransformerRun = channel.unary_unary(
+                '/isodrome.v1.Isodrome/StartTransformerRun',
+                request_serializer=isodrome_dot_v1_dot_isodrome__pb2.StartTransformerRunRequest.SerializeToString,
+                response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.TransformerRun.FromString,
+                _registered_method=True)
+        self.ListTransformerRuns = channel.unary_unary(
+                '/isodrome.v1.Isodrome/ListTransformerRuns',
+                request_serializer=isodrome_dot_v1_dot_isodrome__pb2.ListTransformerRunsRequest.SerializeToString,
+                response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.ListTransformerRunsResponse.FromString,
+                _registered_method=True)
+        self.GetTransformerRun = channel.unary_unary(
+                '/isodrome.v1.Isodrome/GetTransformerRun',
+                request_serializer=isodrome_dot_v1_dot_isodrome__pb2.GetTransformerRunRequest.SerializeToString,
+                response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.TransformerRun.FromString,
+                _registered_method=True)
+        self.CancelTransformerRun = channel.unary_unary(
+                '/isodrome.v1.Isodrome/CancelTransformerRun',
+                request_serializer=isodrome_dot_v1_dot_isodrome__pb2.CancelTransformerRunRequest.SerializeToString,
+                response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.TransformerRun.FromString,
+                _registered_method=True)
+        self.GetUsage = channel.unary_unary(
+                '/isodrome.v1.Isodrome/GetUsage',
+                request_serializer=isodrome_dot_v1_dot_isodrome__pb2.GetUsageRequest.SerializeToString,
+                response_deserializer=isodrome_dot_v1_dot_isodrome__pb2.GetUsageResponse.FromString,
                 _registered_method=True)
 
 
@@ -324,6 +439,32 @@ class IsodromeServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def DeclareFeed(self, request, context):
+        """Declares a feed's definition (key, time fields, …), idempotently: creates version 1 if the
+        feed does not exist; returns the latest version if it matches; otherwise, with
+        allow_new_version, creates the next version (FAILED_PRECONDITION without it). Description,
+        licence, attribution and source URL are updated in place, never versioned.
+        WRITER or ADMIN
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SetFeedTag(self, request, context):
+        """Points a tag at a version (FeedRef with version or tag), moving it if it pointed elsewhere.
+        WRITER or ADMIN
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def DeleteFeedTag(self, request, context):
+        """WRITER or ADMIN
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def ListRejections(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -412,6 +553,147 @@ class IsodromeServicer(object):
 
     def Lookup(self, request, context):
         """Point-in-time values for (key, time) probes: an as-of join against the client's rows.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SyncFeed(self, request, context):
+        """A synchronisation point for a subscriber: every event acknowledged before `server_ns` is
+        below `next_offsets` and decided. A subscriber has all of them once, in each partition, it
+        has received the event at `last_accepted` (or subscribed past it). Transformers use it to
+        know a dependency is complete up to a trigger's receive time.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def DeployTransformer(self, request, context):
+        """Transformers: code that reads feeds and writes a feed, run by Isodrome. A transformer
+        declares its triggers (feeds whose events invoke it) and dependencies (feeds it reads as of
+        each trigger), each pinned to a version at deploy, and its output feed. Deploying again makes
+        a new version, which writes a new output version and runs from then on. Runs execute a
+        transformer over a time range (backtests, backfills) into a named feed.
+        Viewing: READER; deploying, pausing, resuming, deleting and runs: ADMIN.
+
+        A deploy is asynchronous: it returns a build. Isodrome installs the project's packages,
+        extracts the transformers its code declares (the manifest), resolves and pins the inputs,
+        then verifies the result on recent data; only a verified build becomes the new version.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def UploadBundle(self, request_iterator, context):
+        """A project (a zip of the directory), uploaded in chunks before deploying it.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetTransformerBuild(self, request, context):
+        """with log and report
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListTransformerBuilds(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CancelTransformerBuild(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CreatePackageIndex(self, request, context):
+        """Private package indexes builds install from (ADMIN). Credentials are write-only.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListPackageIndexes(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SetPackageIndexCredentials(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def DeletePackageIndex(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListTransformers(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetTransformer(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def PauseTransformer(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ResumeTransformer(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def DeleteTransformer(self, request, context):
+        """its feeds stay
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def StartTransformerRun(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListTransformerRuns(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetTransformerRun(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CancelTransformerRun(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetUsage(self, request, context):
+        """Usage, for billing and audit (ADMIN): what the organization ingested, stored and read, per
+        minute, hour or day, optionally per feed. Counters are summed; levels (stored bytes and
+        events, feed count) are averaged over the period.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -510,6 +792,21 @@ def add_IsodromeServicer_to_server(servicer, server):
                     request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.UndeleteFeedRequest.FromString,
                     response_serializer=isodrome_dot_v1_dot_isodrome__pb2.Feed.SerializeToString,
             ),
+            'DeclareFeed': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeclareFeed,
+                    request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.DeclareFeedRequest.FromString,
+                    response_serializer=isodrome_dot_v1_dot_isodrome__pb2.DeclareFeedResponse.SerializeToString,
+            ),
+            'SetFeedTag': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetFeedTag,
+                    request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.SetFeedTagRequest.FromString,
+                    response_serializer=isodrome_dot_v1_dot_isodrome__pb2.Feed.SerializeToString,
+            ),
+            'DeleteFeedTag': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteFeedTag,
+                    request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.DeleteFeedTagRequest.FromString,
+                    response_serializer=isodrome_dot_v1_dot_isodrome__pb2.DeleteFeedTagResponse.SerializeToString,
+            ),
             'ListRejections': grpc.unary_unary_rpc_method_handler(
                     servicer.ListRejections,
                     request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.ListRejectionsRequest.FromString,
@@ -579,6 +876,106 @@ def add_IsodromeServicer_to_server(servicer, server):
                     servicer.Lookup,
                     request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.LookupRequest.FromString,
                     response_serializer=isodrome_dot_v1_dot_isodrome__pb2.LookupResponse.SerializeToString,
+            ),
+            'SyncFeed': grpc.unary_unary_rpc_method_handler(
+                    servicer.SyncFeed,
+                    request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.SyncFeedRequest.FromString,
+                    response_serializer=isodrome_dot_v1_dot_isodrome__pb2.SyncFeedResponse.SerializeToString,
+            ),
+            'DeployTransformer': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeployTransformer,
+                    request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.DeployTransformerRequest.FromString,
+                    response_serializer=isodrome_dot_v1_dot_isodrome__pb2.TransformerBuild.SerializeToString,
+            ),
+            'UploadBundle': grpc.stream_unary_rpc_method_handler(
+                    servicer.UploadBundle,
+                    request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.UploadBundleRequest.FromString,
+                    response_serializer=isodrome_dot_v1_dot_isodrome__pb2.UploadBundleResponse.SerializeToString,
+            ),
+            'GetTransformerBuild': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetTransformerBuild,
+                    request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.GetTransformerBuildRequest.FromString,
+                    response_serializer=isodrome_dot_v1_dot_isodrome__pb2.TransformerBuild.SerializeToString,
+            ),
+            'ListTransformerBuilds': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListTransformerBuilds,
+                    request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.ListTransformerBuildsRequest.FromString,
+                    response_serializer=isodrome_dot_v1_dot_isodrome__pb2.ListTransformerBuildsResponse.SerializeToString,
+            ),
+            'CancelTransformerBuild': grpc.unary_unary_rpc_method_handler(
+                    servicer.CancelTransformerBuild,
+                    request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.CancelTransformerBuildRequest.FromString,
+                    response_serializer=isodrome_dot_v1_dot_isodrome__pb2.TransformerBuild.SerializeToString,
+            ),
+            'CreatePackageIndex': grpc.unary_unary_rpc_method_handler(
+                    servicer.CreatePackageIndex,
+                    request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.CreatePackageIndexRequest.FromString,
+                    response_serializer=isodrome_dot_v1_dot_isodrome__pb2.PackageIndex.SerializeToString,
+            ),
+            'ListPackageIndexes': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListPackageIndexes,
+                    request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.ListPackageIndexesRequest.FromString,
+                    response_serializer=isodrome_dot_v1_dot_isodrome__pb2.ListPackageIndexesResponse.SerializeToString,
+            ),
+            'SetPackageIndexCredentials': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetPackageIndexCredentials,
+                    request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.SetPackageIndexCredentialsRequest.FromString,
+                    response_serializer=isodrome_dot_v1_dot_isodrome__pb2.PackageIndex.SerializeToString,
+            ),
+            'DeletePackageIndex': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeletePackageIndex,
+                    request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.DeletePackageIndexRequest.FromString,
+                    response_serializer=isodrome_dot_v1_dot_isodrome__pb2.DeletePackageIndexResponse.SerializeToString,
+            ),
+            'ListTransformers': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListTransformers,
+                    request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.ListTransformersRequest.FromString,
+                    response_serializer=isodrome_dot_v1_dot_isodrome__pb2.ListTransformersResponse.SerializeToString,
+            ),
+            'GetTransformer': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetTransformer,
+                    request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.GetTransformerRequest.FromString,
+                    response_serializer=isodrome_dot_v1_dot_isodrome__pb2.Transformer.SerializeToString,
+            ),
+            'PauseTransformer': grpc.unary_unary_rpc_method_handler(
+                    servicer.PauseTransformer,
+                    request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.PauseTransformerRequest.FromString,
+                    response_serializer=isodrome_dot_v1_dot_isodrome__pb2.Transformer.SerializeToString,
+            ),
+            'ResumeTransformer': grpc.unary_unary_rpc_method_handler(
+                    servicer.ResumeTransformer,
+                    request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.ResumeTransformerRequest.FromString,
+                    response_serializer=isodrome_dot_v1_dot_isodrome__pb2.Transformer.SerializeToString,
+            ),
+            'DeleteTransformer': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteTransformer,
+                    request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.DeleteTransformerRequest.FromString,
+                    response_serializer=isodrome_dot_v1_dot_isodrome__pb2.DeleteTransformerResponse.SerializeToString,
+            ),
+            'StartTransformerRun': grpc.unary_unary_rpc_method_handler(
+                    servicer.StartTransformerRun,
+                    request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.StartTransformerRunRequest.FromString,
+                    response_serializer=isodrome_dot_v1_dot_isodrome__pb2.TransformerRun.SerializeToString,
+            ),
+            'ListTransformerRuns': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListTransformerRuns,
+                    request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.ListTransformerRunsRequest.FromString,
+                    response_serializer=isodrome_dot_v1_dot_isodrome__pb2.ListTransformerRunsResponse.SerializeToString,
+            ),
+            'GetTransformerRun': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetTransformerRun,
+                    request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.GetTransformerRunRequest.FromString,
+                    response_serializer=isodrome_dot_v1_dot_isodrome__pb2.TransformerRun.SerializeToString,
+            ),
+            'CancelTransformerRun': grpc.unary_unary_rpc_method_handler(
+                    servicer.CancelTransformerRun,
+                    request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.CancelTransformerRunRequest.FromString,
+                    response_serializer=isodrome_dot_v1_dot_isodrome__pb2.TransformerRun.SerializeToString,
+            ),
+            'GetUsage': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetUsage,
+                    request_deserializer=isodrome_dot_v1_dot_isodrome__pb2.GetUsageRequest.FromString,
+                    response_serializer=isodrome_dot_v1_dot_isodrome__pb2.GetUsageResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -1078,6 +1475,87 @@ class Isodrome(object):
             _registered_method=True)
 
     @staticmethod
+    def DeclareFeed(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/isodrome.v1.Isodrome/DeclareFeed',
+            isodrome_dot_v1_dot_isodrome__pb2.DeclareFeedRequest.SerializeToString,
+            isodrome_dot_v1_dot_isodrome__pb2.DeclareFeedResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SetFeedTag(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/isodrome.v1.Isodrome/SetFeedTag',
+            isodrome_dot_v1_dot_isodrome__pb2.SetFeedTagRequest.SerializeToString,
+            isodrome_dot_v1_dot_isodrome__pb2.Feed.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DeleteFeedTag(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/isodrome.v1.Isodrome/DeleteFeedTag',
+            isodrome_dot_v1_dot_isodrome__pb2.DeleteFeedTagRequest.SerializeToString,
+            isodrome_dot_v1_dot_isodrome__pb2.DeleteFeedTagResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
     def ListRejections(request,
             target,
             options=(),
@@ -1445,6 +1923,546 @@ class Isodrome(object):
             '/isodrome.v1.Isodrome/Lookup',
             isodrome_dot_v1_dot_isodrome__pb2.LookupRequest.SerializeToString,
             isodrome_dot_v1_dot_isodrome__pb2.LookupResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SyncFeed(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/isodrome.v1.Isodrome/SyncFeed',
+            isodrome_dot_v1_dot_isodrome__pb2.SyncFeedRequest.SerializeToString,
+            isodrome_dot_v1_dot_isodrome__pb2.SyncFeedResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DeployTransformer(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/isodrome.v1.Isodrome/DeployTransformer',
+            isodrome_dot_v1_dot_isodrome__pb2.DeployTransformerRequest.SerializeToString,
+            isodrome_dot_v1_dot_isodrome__pb2.TransformerBuild.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def UploadBundle(request_iterator,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.stream_unary(
+            request_iterator,
+            target,
+            '/isodrome.v1.Isodrome/UploadBundle',
+            isodrome_dot_v1_dot_isodrome__pb2.UploadBundleRequest.SerializeToString,
+            isodrome_dot_v1_dot_isodrome__pb2.UploadBundleResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetTransformerBuild(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/isodrome.v1.Isodrome/GetTransformerBuild',
+            isodrome_dot_v1_dot_isodrome__pb2.GetTransformerBuildRequest.SerializeToString,
+            isodrome_dot_v1_dot_isodrome__pb2.TransformerBuild.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListTransformerBuilds(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/isodrome.v1.Isodrome/ListTransformerBuilds',
+            isodrome_dot_v1_dot_isodrome__pb2.ListTransformerBuildsRequest.SerializeToString,
+            isodrome_dot_v1_dot_isodrome__pb2.ListTransformerBuildsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CancelTransformerBuild(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/isodrome.v1.Isodrome/CancelTransformerBuild',
+            isodrome_dot_v1_dot_isodrome__pb2.CancelTransformerBuildRequest.SerializeToString,
+            isodrome_dot_v1_dot_isodrome__pb2.TransformerBuild.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CreatePackageIndex(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/isodrome.v1.Isodrome/CreatePackageIndex',
+            isodrome_dot_v1_dot_isodrome__pb2.CreatePackageIndexRequest.SerializeToString,
+            isodrome_dot_v1_dot_isodrome__pb2.PackageIndex.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListPackageIndexes(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/isodrome.v1.Isodrome/ListPackageIndexes',
+            isodrome_dot_v1_dot_isodrome__pb2.ListPackageIndexesRequest.SerializeToString,
+            isodrome_dot_v1_dot_isodrome__pb2.ListPackageIndexesResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SetPackageIndexCredentials(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/isodrome.v1.Isodrome/SetPackageIndexCredentials',
+            isodrome_dot_v1_dot_isodrome__pb2.SetPackageIndexCredentialsRequest.SerializeToString,
+            isodrome_dot_v1_dot_isodrome__pb2.PackageIndex.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DeletePackageIndex(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/isodrome.v1.Isodrome/DeletePackageIndex',
+            isodrome_dot_v1_dot_isodrome__pb2.DeletePackageIndexRequest.SerializeToString,
+            isodrome_dot_v1_dot_isodrome__pb2.DeletePackageIndexResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListTransformers(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/isodrome.v1.Isodrome/ListTransformers',
+            isodrome_dot_v1_dot_isodrome__pb2.ListTransformersRequest.SerializeToString,
+            isodrome_dot_v1_dot_isodrome__pb2.ListTransformersResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetTransformer(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/isodrome.v1.Isodrome/GetTransformer',
+            isodrome_dot_v1_dot_isodrome__pb2.GetTransformerRequest.SerializeToString,
+            isodrome_dot_v1_dot_isodrome__pb2.Transformer.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def PauseTransformer(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/isodrome.v1.Isodrome/PauseTransformer',
+            isodrome_dot_v1_dot_isodrome__pb2.PauseTransformerRequest.SerializeToString,
+            isodrome_dot_v1_dot_isodrome__pb2.Transformer.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ResumeTransformer(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/isodrome.v1.Isodrome/ResumeTransformer',
+            isodrome_dot_v1_dot_isodrome__pb2.ResumeTransformerRequest.SerializeToString,
+            isodrome_dot_v1_dot_isodrome__pb2.Transformer.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DeleteTransformer(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/isodrome.v1.Isodrome/DeleteTransformer',
+            isodrome_dot_v1_dot_isodrome__pb2.DeleteTransformerRequest.SerializeToString,
+            isodrome_dot_v1_dot_isodrome__pb2.DeleteTransformerResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def StartTransformerRun(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/isodrome.v1.Isodrome/StartTransformerRun',
+            isodrome_dot_v1_dot_isodrome__pb2.StartTransformerRunRequest.SerializeToString,
+            isodrome_dot_v1_dot_isodrome__pb2.TransformerRun.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListTransformerRuns(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/isodrome.v1.Isodrome/ListTransformerRuns',
+            isodrome_dot_v1_dot_isodrome__pb2.ListTransformerRunsRequest.SerializeToString,
+            isodrome_dot_v1_dot_isodrome__pb2.ListTransformerRunsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetTransformerRun(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/isodrome.v1.Isodrome/GetTransformerRun',
+            isodrome_dot_v1_dot_isodrome__pb2.GetTransformerRunRequest.SerializeToString,
+            isodrome_dot_v1_dot_isodrome__pb2.TransformerRun.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CancelTransformerRun(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/isodrome.v1.Isodrome/CancelTransformerRun',
+            isodrome_dot_v1_dot_isodrome__pb2.CancelTransformerRunRequest.SerializeToString,
+            isodrome_dot_v1_dot_isodrome__pb2.TransformerRun.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetUsage(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/isodrome.v1.Isodrome/GetUsage',
+            isodrome_dot_v1_dot_isodrome__pb2.GetUsageRequest.SerializeToString,
+            isodrome_dot_v1_dot_isodrome__pb2.GetUsageResponse.FromString,
             options,
             channel_credentials,
             insecure,

@@ -35,6 +35,7 @@ class FakeIsodrome(pb_grpc.IsodromeServicer):
         self.connections: list[pb.Connection] = []
         self.requests: list[str] = []
         self.capabilities: list[str] = []
+        self._init_transformers()
         self.estimate = (0, 0)
         self.feeds: dict[tuple[str, str], pb.Feed] = {}
         self.events: dict[tuple[str, str], list[tuple[int, dict]]] = {}
@@ -348,3 +349,99 @@ class FakeSignIn:
         server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         threading.Thread(target=server.serve_forever, daemon=True).start()
         return server, f"http://127.0.0.1:{server.server_address[1]}"
+
+
+class FakeTransformers:
+    """Mixed into FakeIsodrome: a deploy whose build goes queued → building → verifying → ready,
+    then a stateful transformer whose backfill counts down to 0, one step per poll."""
+
+    def _init_transformers(self):
+        self.bundles: dict[str, bytes] = {}
+        self.deploys: list[pb.DeployTransformerRequest] = []
+        self.build_polls = 0
+        self.transformer_polls = 0
+        self.build_outcome = "ready"
+        self.build_steps = None
+        self.unavailable_polls = 0  # statuses returned poll by poll (default: building, verifying ×2, outcome)
+        self.report = {"passed": True, "stages": [
+            {"stage": "load", "ok": True, "startup_ms": 120, "memory_bytes": 40_000_000},
+            {"stage": "replay", "ok": True, "events": 1000, "errors": 0, "outputs": 1000, "ms_per_event": 0.2,
+             "deterministic": True},
+            {"stage": "fixtures", "ok": True, "files": [
+                {"file": "ratings.jsonl", "cases": 3, "failures": []},
+                {"file": "nfl-lines/lines.jsonl", "cases": 2, "failures": [
+                    {"line": 2, "expected": [{"spread": 3.5}], "got": [{"spread": 3.0}]}]},
+            ]},
+        ]}
+        self.runs: list[pb.StartTransformerRunRequest] = []
+
+    def UploadBundle(self, request_iterator, context):
+        self._auth(context)
+        import hashlib
+
+        data = b"".join(r.chunk for r in request_iterator)
+        sha = hashlib.sha256(data).hexdigest()
+        self.bundles[sha] = data
+        return pb.UploadBundleResponse(sha256=sha, size_bytes=len(data))
+
+    def DeployTransformer(self, request, context):
+        self._auth(context)
+        self.deploys.append(request)
+        self.build_polls = 0
+        return self._build("queued")
+
+    def _build(self, status):
+        r = self.deploys[-1]
+        b = pb.TransformerBuild(id="b1", namespace="default", transformer=r.transformer.name or "nfl-elo",
+                                status=status, validate_only=r.validate_only, python_version="3.12",
+                                created_at_ns=1, report_json=json.dumps(self.report) if status in (
+                                    "ready", "verification_failed") else "")
+        if status == "ready":
+            b.finished_at_ns = 2
+            b.transformer_version = 0 if r.validate_only else 3
+        if status == "verification_failed":
+            b.status_detail = "fixtures failed"
+        return b
+
+    def GetTransformerBuild(self, request, context):
+        self._auth(context)
+        if self.unavailable_polls > 0:   # the server restarting mid-build
+            self.unavailable_polls -= 1
+            context.abort(grpc.StatusCode.UNAVAILABLE, "restarting")
+        self.build_polls += 1
+        steps = self.build_steps or ["building", "verifying", "verifying", self.build_outcome]
+        return self._build(steps[min(self.build_polls - 1, len(steps) - 1)])
+
+    def GetTransformer(self, request, context):
+        self._auth(context)
+        self.transformer_polls += 1
+        remaining = max(0, 3 - self.transformer_polls) * 1000
+        return pb.Transformer(
+            name=request.transformer.name, namespace="default", version=3, status="running",
+            stateful=True, last_heartbeat_at_ns=10, events_in=22260,
+            stats=pb.TransformerStats(backfill_remaining=remaining, code_state_bytes=4200),
+            output=pb.TransformerOutput(feed="nfl_elo", pinned=pb.FeedRef(namespace="default", name="nfl_elo", version=1)),
+        )
+
+    def ListTransformers(self, request, context):
+        self._auth(context)
+        return pb.ListTransformersResponse(transformers=[pb.Transformer(
+            name="nfl-elo", namespace="default", version=3, status="running", stateful=True,
+            stats=pb.TransformerStats(backfill_remaining=1500))])
+
+    def StartTransformerRun(self, request, context):
+        self._auth(context)
+        self.runs.append(request)
+        return pb.TransformerRun(id="r1", transformer=request.transformer.name, version=3, status="pending",
+                                 output=pb.FeedRef(namespace="default", name=request.into or "x_run", version=1))
+
+    def GetTransformerRun(self, request, context):
+        self._auth(context)
+        return pb.TransformerRun(id="r1", transformer="nfl-elo", version=3, status="done", progress=1.0,
+                                 events_in=10, events_out=10,
+                                 output=pb.FeedRef(namespace="default", name="x_run", version=1))
+
+
+for _name, _value in vars(FakeTransformers).items():
+    if callable(_value) and not _name.startswith("__"):
+        setattr(FakeIsodrome, _name, _value)

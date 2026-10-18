@@ -9,7 +9,7 @@ import pandas as pd
 import pyarrow as pa
 
 from isodrome import errors
-from isodrome.output import decode
+from isodrome._output import decode
 from isodrome.query import BASES, TIME_COLUMNS, Col, Query
 from isodrome.v1 import isodrome_pb2 as pb
 

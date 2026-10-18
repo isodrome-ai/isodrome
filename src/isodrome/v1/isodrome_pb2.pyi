@@ -92,6 +92,13 @@ class Delivery(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     DELIVERY_UNSPECIFIED: _ClassVar[Delivery]
     DELIVERY_CONFIRMED: _ClassVar[Delivery]
     DELIVERY_FAST: _ClassVar[Delivery]
+
+class UsageBucket(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    USAGE_BUCKET_UNSPECIFIED: _ClassVar[UsageBucket]
+    USAGE_BUCKET_MINUTE: _ClassVar[UsageBucket]
+    USAGE_BUCKET_HOUR: _ClassVar[UsageBucket]
+    USAGE_BUCKET_DAY: _ClassVar[UsageBucket]
 ROLE_UNSPECIFIED: Role
 ROLE_ADMIN: Role
 ROLE_WRITER: Role
@@ -145,6 +152,10 @@ DEDUPE_ORDER_PUBLICATION: DedupeOrder
 DELIVERY_UNSPECIFIED: Delivery
 DELIVERY_CONFIRMED: Delivery
 DELIVERY_FAST: Delivery
+USAGE_BUCKET_UNSPECIFIED: UsageBucket
+USAGE_BUCKET_MINUTE: UsageBucket
+USAGE_BUCKET_HOUR: UsageBucket
+USAGE_BUCKET_DAY: UsageBucket
 
 class GetServerInfoRequest(_message.Message):
     __slots__ = ()
@@ -193,18 +204,20 @@ class WhoAmIResponse(_message.Message):
     def __init__(self, organization: _Optional[str] = ..., default_namespace: _Optional[str] = ..., role: _Optional[_Union[Role, str]] = ..., key_id: _Optional[str] = ..., email: _Optional[str] = ..., kind: _Optional[_Union[CredentialKind, str]] = ..., expires_at_ns: _Optional[int] = ..., service_account: _Optional[str] = ...) -> None: ...
 
 class Namespace(_message.Message):
-    __slots__ = ("id", "organization", "name", "created_at_ns", "public")
+    __slots__ = ("id", "organization", "name", "created_at_ns", "public", "owner")
     ID_FIELD_NUMBER: _ClassVar[int]
     ORGANIZATION_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     CREATED_AT_NS_FIELD_NUMBER: _ClassVar[int]
     PUBLIC_FIELD_NUMBER: _ClassVar[int]
+    OWNER_FIELD_NUMBER: _ClassVar[int]
     id: str
     organization: str
     name: str
     created_at_ns: int
     public: bool
-    def __init__(self, id: _Optional[str] = ..., organization: _Optional[str] = ..., name: _Optional[str] = ..., created_at_ns: _Optional[int] = ..., public: bool = ...) -> None: ...
+    owner: str
+    def __init__(self, id: _Optional[str] = ..., organization: _Optional[str] = ..., name: _Optional[str] = ..., created_at_ns: _Optional[int] = ..., public: bool = ..., owner: _Optional[str] = ...) -> None: ...
 
 class CreateNamespaceRequest(_message.Message):
     __slots__ = ("name", "public")
@@ -347,14 +360,18 @@ class RevokeApiKeyRequest(_message.Message):
     def __init__(self, key_id: _Optional[str] = ...) -> None: ...
 
 class FeedRef(_message.Message):
-    __slots__ = ("namespace", "name", "organization")
+    __slots__ = ("namespace", "name", "organization", "version", "tag")
     NAMESPACE_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     ORGANIZATION_FIELD_NUMBER: _ClassVar[int]
+    VERSION_FIELD_NUMBER: _ClassVar[int]
+    TAG_FIELD_NUMBER: _ClassVar[int]
     namespace: str
     name: str
     organization: str
-    def __init__(self, namespace: _Optional[str] = ..., name: _Optional[str] = ..., organization: _Optional[str] = ...) -> None: ...
+    version: int
+    tag: str
+    def __init__(self, namespace: _Optional[str] = ..., name: _Optional[str] = ..., organization: _Optional[str] = ..., version: _Optional[int] = ..., tag: _Optional[str] = ...) -> None: ...
 
 class Column(_message.Message):
     __slots__ = ("name", "type", "first_seen_ns")
@@ -367,7 +384,7 @@ class Column(_message.Message):
     def __init__(self, name: _Optional[str] = ..., type: _Optional[_Union[ColumnType, str]] = ..., first_seen_ns: _Optional[int] = ...) -> None: ...
 
 class FeedStats(_message.Message):
-    __slots__ = ("events_flushed", "events_pending_flush", "flush_lag_ms", "file_count", "schema_conflicts", "rejections", "last_event_time_ns", "last_receive_time_ns", "last_published_time_ns")
+    __slots__ = ("events_flushed", "events_pending_flush", "flush_lag_ms", "file_count", "schema_conflicts", "rejections", "last_event_time_ns", "last_receive_time_ns", "last_published_time_ns", "events_ingested_total", "bytes_ingested_total", "bytes_read_total", "bytes_stored")
     EVENTS_FLUSHED_FIELD_NUMBER: _ClassVar[int]
     EVENTS_PENDING_FLUSH_FIELD_NUMBER: _ClassVar[int]
     FLUSH_LAG_MS_FIELD_NUMBER: _ClassVar[int]
@@ -377,6 +394,10 @@ class FeedStats(_message.Message):
     LAST_EVENT_TIME_NS_FIELD_NUMBER: _ClassVar[int]
     LAST_RECEIVE_TIME_NS_FIELD_NUMBER: _ClassVar[int]
     LAST_PUBLISHED_TIME_NS_FIELD_NUMBER: _ClassVar[int]
+    EVENTS_INGESTED_TOTAL_FIELD_NUMBER: _ClassVar[int]
+    BYTES_INGESTED_TOTAL_FIELD_NUMBER: _ClassVar[int]
+    BYTES_READ_TOTAL_FIELD_NUMBER: _ClassVar[int]
+    BYTES_STORED_FIELD_NUMBER: _ClassVar[int]
     events_flushed: int
     events_pending_flush: int
     flush_lag_ms: int
@@ -386,7 +407,11 @@ class FeedStats(_message.Message):
     last_event_time_ns: int
     last_receive_time_ns: int
     last_published_time_ns: int
-    def __init__(self, events_flushed: _Optional[int] = ..., events_pending_flush: _Optional[int] = ..., flush_lag_ms: _Optional[int] = ..., file_count: _Optional[int] = ..., schema_conflicts: _Optional[int] = ..., rejections: _Optional[_Union[RejectionStats, _Mapping]] = ..., last_event_time_ns: _Optional[int] = ..., last_receive_time_ns: _Optional[int] = ..., last_published_time_ns: _Optional[int] = ...) -> None: ...
+    events_ingested_total: int
+    bytes_ingested_total: int
+    bytes_read_total: int
+    bytes_stored: int
+    def __init__(self, events_flushed: _Optional[int] = ..., events_pending_flush: _Optional[int] = ..., flush_lag_ms: _Optional[int] = ..., file_count: _Optional[int] = ..., schema_conflicts: _Optional[int] = ..., rejections: _Optional[_Union[RejectionStats, _Mapping]] = ..., last_event_time_ns: _Optional[int] = ..., last_receive_time_ns: _Optional[int] = ..., last_published_time_ns: _Optional[int] = ..., events_ingested_total: _Optional[int] = ..., bytes_ingested_total: _Optional[int] = ..., bytes_read_total: _Optional[int] = ..., bytes_stored: _Optional[int] = ...) -> None: ...
 
 class RejectionStats(_message.Message):
     __slots__ = ("total", "last_hour", "last_hour_by_reason", "latest")
@@ -492,7 +517,7 @@ class UpdateFeedRequest(_message.Message):
     def __init__(self, feed: _Optional[_Union[FeedRef, _Mapping]] = ..., time_field: _Optional[str] = ..., arrival_time: bool = ..., time_unit: _Optional[_Union[TimeUnit, str]] = ..., ack_mode: _Optional[_Union[AckMode, str]] = ..., key_field: _Optional[str] = ..., publication_time_field: _Optional[str] = ..., description: _Optional[str] = ..., licence: _Optional[str] = ..., attribution: _Optional[str] = ..., source_url: _Optional[str] = ...) -> None: ...
 
 class Feed(_message.Message):
-    __slots__ = ("id", "organization", "namespace", "name", "key_field", "time_field", "time_unit", "ack_mode", "partitions", "created_at_ns", "columns", "stats", "arrival_time", "deleted_at_ns", "purge_at_ns", "publication_time_field", "description", "licence", "attribution", "source_url", "public")
+    __slots__ = ("id", "organization", "namespace", "name", "key_field", "time_field", "time_unit", "ack_mode", "partitions", "created_at_ns", "columns", "stats", "arrival_time", "deleted_at_ns", "purge_at_ns", "publication_time_field", "description", "licence", "attribution", "source_url", "public", "version", "tags", "latest_version")
     ID_FIELD_NUMBER: _ClassVar[int]
     ORGANIZATION_FIELD_NUMBER: _ClassVar[int]
     NAMESPACE_FIELD_NUMBER: _ClassVar[int]
@@ -514,6 +539,9 @@ class Feed(_message.Message):
     ATTRIBUTION_FIELD_NUMBER: _ClassVar[int]
     SOURCE_URL_FIELD_NUMBER: _ClassVar[int]
     PUBLIC_FIELD_NUMBER: _ClassVar[int]
+    VERSION_FIELD_NUMBER: _ClassVar[int]
+    TAGS_FIELD_NUMBER: _ClassVar[int]
+    LATEST_VERSION_FIELD_NUMBER: _ClassVar[int]
     id: str
     organization: str
     namespace: str
@@ -535,13 +563,52 @@ class Feed(_message.Message):
     attribution: str
     source_url: str
     public: bool
-    def __init__(self, id: _Optional[str] = ..., organization: _Optional[str] = ..., namespace: _Optional[str] = ..., name: _Optional[str] = ..., key_field: _Optional[str] = ..., time_field: _Optional[str] = ..., time_unit: _Optional[_Union[TimeUnit, str]] = ..., ack_mode: _Optional[_Union[AckMode, str]] = ..., partitions: _Optional[int] = ..., created_at_ns: _Optional[int] = ..., columns: _Optional[_Iterable[_Union[Column, _Mapping]]] = ..., stats: _Optional[_Union[FeedStats, _Mapping]] = ..., arrival_time: bool = ..., deleted_at_ns: _Optional[int] = ..., purge_at_ns: _Optional[int] = ..., publication_time_field: _Optional[str] = ..., description: _Optional[str] = ..., licence: _Optional[str] = ..., attribution: _Optional[str] = ..., source_url: _Optional[str] = ..., public: bool = ...) -> None: ...
+    version: int
+    tags: _containers.RepeatedScalarFieldContainer[str]
+    latest_version: int
+    def __init__(self, id: _Optional[str] = ..., organization: _Optional[str] = ..., namespace: _Optional[str] = ..., name: _Optional[str] = ..., key_field: _Optional[str] = ..., time_field: _Optional[str] = ..., time_unit: _Optional[_Union[TimeUnit, str]] = ..., ack_mode: _Optional[_Union[AckMode, str]] = ..., partitions: _Optional[int] = ..., created_at_ns: _Optional[int] = ..., columns: _Optional[_Iterable[_Union[Column, _Mapping]]] = ..., stats: _Optional[_Union[FeedStats, _Mapping]] = ..., arrival_time: bool = ..., deleted_at_ns: _Optional[int] = ..., purge_at_ns: _Optional[int] = ..., publication_time_field: _Optional[str] = ..., description: _Optional[str] = ..., licence: _Optional[str] = ..., attribution: _Optional[str] = ..., source_url: _Optional[str] = ..., public: bool = ..., version: _Optional[int] = ..., tags: _Optional[_Iterable[str]] = ..., latest_version: _Optional[int] = ...) -> None: ...
 
 class DeleteFeedRequest(_message.Message):
     __slots__ = ("feed",)
     FEED_FIELD_NUMBER: _ClassVar[int]
     feed: FeedRef
     def __init__(self, feed: _Optional[_Union[FeedRef, _Mapping]] = ...) -> None: ...
+
+class DeclareFeedRequest(_message.Message):
+    __slots__ = ("definition", "allow_new_version")
+    DEFINITION_FIELD_NUMBER: _ClassVar[int]
+    ALLOW_NEW_VERSION_FIELD_NUMBER: _ClassVar[int]
+    definition: CreateFeedRequest
+    allow_new_version: bool
+    def __init__(self, definition: _Optional[_Union[CreateFeedRequest, _Mapping]] = ..., allow_new_version: bool = ...) -> None: ...
+
+class DeclareFeedResponse(_message.Message):
+    __slots__ = ("feed", "outcome")
+    FEED_FIELD_NUMBER: _ClassVar[int]
+    OUTCOME_FIELD_NUMBER: _ClassVar[int]
+    feed: Feed
+    outcome: str
+    def __init__(self, feed: _Optional[_Union[Feed, _Mapping]] = ..., outcome: _Optional[str] = ...) -> None: ...
+
+class SetFeedTagRequest(_message.Message):
+    __slots__ = ("feed", "tag")
+    FEED_FIELD_NUMBER: _ClassVar[int]
+    TAG_FIELD_NUMBER: _ClassVar[int]
+    feed: FeedRef
+    tag: str
+    def __init__(self, feed: _Optional[_Union[FeedRef, _Mapping]] = ..., tag: _Optional[str] = ...) -> None: ...
+
+class DeleteFeedTagRequest(_message.Message):
+    __slots__ = ("feed", "tag")
+    FEED_FIELD_NUMBER: _ClassVar[int]
+    TAG_FIELD_NUMBER: _ClassVar[int]
+    feed: FeedRef
+    tag: str
+    def __init__(self, feed: _Optional[_Union[FeedRef, _Mapping]] = ..., tag: _Optional[str] = ...) -> None: ...
+
+class DeleteFeedTagResponse(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
 
 class UndeleteFeedRequest(_message.Message):
     __slots__ = ("feed", "id")
@@ -558,14 +625,16 @@ class GetFeedRequest(_message.Message):
     def __init__(self, feed: _Optional[_Union[FeedRef, _Mapping]] = ...) -> None: ...
 
 class ListFeedsRequest(_message.Message):
-    __slots__ = ("namespace", "deleted", "organization")
+    __slots__ = ("namespace", "deleted", "organization", "all_versions")
     NAMESPACE_FIELD_NUMBER: _ClassVar[int]
     DELETED_FIELD_NUMBER: _ClassVar[int]
     ORGANIZATION_FIELD_NUMBER: _ClassVar[int]
+    ALL_VERSIONS_FIELD_NUMBER: _ClassVar[int]
     namespace: str
     deleted: bool
     organization: str
-    def __init__(self, namespace: _Optional[str] = ..., deleted: bool = ..., organization: _Optional[str] = ...) -> None: ...
+    all_versions: bool
+    def __init__(self, namespace: _Optional[str] = ..., deleted: bool = ..., organization: _Optional[str] = ..., all_versions: bool = ...) -> None: ...
 
 class ListFeedsResponse(_message.Message):
     __slots__ = ("feeds",)
@@ -734,12 +803,13 @@ class Dedupe(_message.Message):
     def __init__(self, columns: _Optional[_Iterable[str]] = ..., keep: _Optional[_Union[DedupeKeep, str]] = ..., order: _Optional[_Union[DedupeOrder, str]] = ...) -> None: ...
 
 class SubscribeRequest(_message.Message):
-    __slots__ = ("feed", "from_beginning", "from_event_time_ns", "from_now", "from_last", "speed", "filters", "columns", "delivery", "include_payload", "dedupe")
+    __slots__ = ("feed", "from_beginning", "from_event_time_ns", "from_now", "from_last", "from_position", "speed", "filters", "columns", "delivery", "include_payload", "dedupe")
     FEED_FIELD_NUMBER: _ClassVar[int]
     FROM_BEGINNING_FIELD_NUMBER: _ClassVar[int]
     FROM_EVENT_TIME_NS_FIELD_NUMBER: _ClassVar[int]
     FROM_NOW_FIELD_NUMBER: _ClassVar[int]
     FROM_LAST_FIELD_NUMBER: _ClassVar[int]
+    FROM_POSITION_FIELD_NUMBER: _ClassVar[int]
     SPEED_FIELD_NUMBER: _ClassVar[int]
     FILTERS_FIELD_NUMBER: _ClassVar[int]
     COLUMNS_FIELD_NUMBER: _ClassVar[int]
@@ -751,13 +821,14 @@ class SubscribeRequest(_message.Message):
     from_event_time_ns: int
     from_now: bool
     from_last: int
+    from_position: Position
     speed: float
     filters: _containers.RepeatedCompositeFieldContainer[Filter]
     columns: _containers.RepeatedScalarFieldContainer[str]
     delivery: Delivery
     include_payload: bool
     dedupe: Dedupe
-    def __init__(self, feed: _Optional[_Union[FeedRef, _Mapping]] = ..., from_beginning: bool = ..., from_event_time_ns: _Optional[int] = ..., from_now: bool = ..., from_last: _Optional[int] = ..., speed: _Optional[float] = ..., filters: _Optional[_Iterable[_Union[Filter, _Mapping]]] = ..., columns: _Optional[_Iterable[str]] = ..., delivery: _Optional[_Union[Delivery, str]] = ..., include_payload: bool = ..., dedupe: _Optional[_Union[Dedupe, _Mapping]] = ...) -> None: ...
+    def __init__(self, feed: _Optional[_Union[FeedRef, _Mapping]] = ..., from_beginning: bool = ..., from_event_time_ns: _Optional[int] = ..., from_now: bool = ..., from_last: _Optional[int] = ..., from_position: _Optional[_Union[Position, _Mapping]] = ..., speed: _Optional[float] = ..., filters: _Optional[_Iterable[_Union[Filter, _Mapping]]] = ..., columns: _Optional[_Iterable[str]] = ..., delivery: _Optional[_Union[Delivery, str]] = ..., include_payload: bool = ..., dedupe: _Optional[_Union[Dedupe, _Mapping]] = ...) -> None: ...
 
 class CaughtUp(_message.Message):
     __slots__ = ("history_events", "position")
@@ -974,3 +1045,491 @@ class LookupResponse(_message.Message):
     batch: ArrowBatch
     server_ns: int
     def __init__(self, batch: _Optional[_Union[ArrowBatch, _Mapping]] = ..., server_ns: _Optional[int] = ...) -> None: ...
+
+class GetUsageRequest(_message.Message):
+    __slots__ = ("start_ns", "end_ns", "bucket", "by_feed")
+    START_NS_FIELD_NUMBER: _ClassVar[int]
+    END_NS_FIELD_NUMBER: _ClassVar[int]
+    BUCKET_FIELD_NUMBER: _ClassVar[int]
+    BY_FEED_FIELD_NUMBER: _ClassVar[int]
+    start_ns: int
+    end_ns: int
+    bucket: UsageBucket
+    by_feed: bool
+    def __init__(self, start_ns: _Optional[int] = ..., end_ns: _Optional[int] = ..., bucket: _Optional[_Union[UsageBucket, str]] = ..., by_feed: bool = ...) -> None: ...
+
+class UsageRow(_message.Message):
+    __slots__ = ("start_ns", "feed", "feed_id", "metric", "value")
+    START_NS_FIELD_NUMBER: _ClassVar[int]
+    FEED_FIELD_NUMBER: _ClassVar[int]
+    FEED_ID_FIELD_NUMBER: _ClassVar[int]
+    METRIC_FIELD_NUMBER: _ClassVar[int]
+    VALUE_FIELD_NUMBER: _ClassVar[int]
+    start_ns: int
+    feed: FeedRef
+    feed_id: str
+    metric: str
+    value: float
+    def __init__(self, start_ns: _Optional[int] = ..., feed: _Optional[_Union[FeedRef, _Mapping]] = ..., feed_id: _Optional[str] = ..., metric: _Optional[str] = ..., value: _Optional[float] = ...) -> None: ...
+
+class GetUsageResponse(_message.Message):
+    __slots__ = ("rows",)
+    ROWS_FIELD_NUMBER: _ClassVar[int]
+    rows: _containers.RepeatedCompositeFieldContainer[UsageRow]
+    def __init__(self, rows: _Optional[_Iterable[_Union[UsageRow, _Mapping]]] = ...) -> None: ...
+
+class TransformerRef(_message.Message):
+    __slots__ = ("namespace", "name")
+    NAMESPACE_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    namespace: str
+    name: str
+    def __init__(self, namespace: _Optional[str] = ..., name: _Optional[str] = ...) -> None: ...
+
+class TransformerInput(_message.Message):
+    __slots__ = ("name", "feed", "pinned", "window", "horizon_ns")
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    FEED_FIELD_NUMBER: _ClassVar[int]
+    PINNED_FIELD_NUMBER: _ClassVar[int]
+    WINDOW_FIELD_NUMBER: _ClassVar[int]
+    HORIZON_NS_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    feed: str
+    pinned: FeedRef
+    window: TransformerWindow
+    horizon_ns: int
+    def __init__(self, name: _Optional[str] = ..., feed: _Optional[str] = ..., pinned: _Optional[_Union[FeedRef, _Mapping]] = ..., window: _Optional[_Union[TransformerWindow, _Mapping]] = ..., horizon_ns: _Optional[int] = ...) -> None: ...
+
+class SyncFeedRequest(_message.Message):
+    __slots__ = ("feed",)
+    FEED_FIELD_NUMBER: _ClassVar[int]
+    feed: FeedRef
+    def __init__(self, feed: _Optional[_Union[FeedRef, _Mapping]] = ...) -> None: ...
+
+class SyncFeedResponse(_message.Message):
+    __slots__ = ("server_ns", "next_offsets", "last_accepted")
+    SERVER_NS_FIELD_NUMBER: _ClassVar[int]
+    NEXT_OFFSETS_FIELD_NUMBER: _ClassVar[int]
+    LAST_ACCEPTED_FIELD_NUMBER: _ClassVar[int]
+    server_ns: int
+    next_offsets: _containers.RepeatedScalarFieldContainer[int]
+    last_accepted: _containers.RepeatedScalarFieldContainer[int]
+    def __init__(self, server_ns: _Optional[int] = ..., next_offsets: _Optional[_Iterable[int]] = ..., last_accepted: _Optional[_Iterable[int]] = ...) -> None: ...
+
+class TransformerWindow(_message.Message):
+    __slots__ = ("count", "duration_ns", "tumbling", "all_keys")
+    COUNT_FIELD_NUMBER: _ClassVar[int]
+    DURATION_NS_FIELD_NUMBER: _ClassVar[int]
+    TUMBLING_FIELD_NUMBER: _ClassVar[int]
+    ALL_KEYS_FIELD_NUMBER: _ClassVar[int]
+    count: int
+    duration_ns: int
+    tumbling: bool
+    all_keys: bool
+    def __init__(self, count: _Optional[int] = ..., duration_ns: _Optional[int] = ..., tumbling: bool = ..., all_keys: bool = ...) -> None: ...
+
+class TransformerOutput(_message.Message):
+    __slots__ = ("feed", "key_field", "time_field", "publication_time_field", "description", "pinned")
+    FEED_FIELD_NUMBER: _ClassVar[int]
+    KEY_FIELD_FIELD_NUMBER: _ClassVar[int]
+    TIME_FIELD_FIELD_NUMBER: _ClassVar[int]
+    PUBLICATION_TIME_FIELD_FIELD_NUMBER: _ClassVar[int]
+    DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
+    PINNED_FIELD_NUMBER: _ClassVar[int]
+    feed: str
+    key_field: str
+    time_field: str
+    publication_time_field: str
+    description: str
+    pinned: FeedRef
+    def __init__(self, feed: _Optional[str] = ..., key_field: _Optional[str] = ..., time_field: _Optional[str] = ..., publication_time_field: _Optional[str] = ..., description: _Optional[str] = ..., pinned: _Optional[_Union[FeedRef, _Mapping]] = ...) -> None: ...
+
+class DeployTransformerRequest(_message.Message):
+    __slots__ = ("transformer", "triggers", "dependencies", "output", "code", "entrypoint", "paused", "on_restart", "as_of_basis", "bundle_sha256", "python_version", "validate_only", "max_error_rate", "sample_events", "allow_unverified", "stateful")
+    TRANSFORMER_FIELD_NUMBER: _ClassVar[int]
+    TRIGGERS_FIELD_NUMBER: _ClassVar[int]
+    DEPENDENCIES_FIELD_NUMBER: _ClassVar[int]
+    OUTPUT_FIELD_NUMBER: _ClassVar[int]
+    CODE_FIELD_NUMBER: _ClassVar[int]
+    ENTRYPOINT_FIELD_NUMBER: _ClassVar[int]
+    PAUSED_FIELD_NUMBER: _ClassVar[int]
+    ON_RESTART_FIELD_NUMBER: _ClassVar[int]
+    AS_OF_BASIS_FIELD_NUMBER: _ClassVar[int]
+    BUNDLE_SHA256_FIELD_NUMBER: _ClassVar[int]
+    PYTHON_VERSION_FIELD_NUMBER: _ClassVar[int]
+    VALIDATE_ONLY_FIELD_NUMBER: _ClassVar[int]
+    MAX_ERROR_RATE_FIELD_NUMBER: _ClassVar[int]
+    SAMPLE_EVENTS_FIELD_NUMBER: _ClassVar[int]
+    ALLOW_UNVERIFIED_FIELD_NUMBER: _ClassVar[int]
+    STATEFUL_FIELD_NUMBER: _ClassVar[int]
+    transformer: TransformerRef
+    triggers: _containers.RepeatedCompositeFieldContainer[TransformerInput]
+    dependencies: _containers.RepeatedCompositeFieldContainer[TransformerInput]
+    output: TransformerOutput
+    code: str
+    entrypoint: str
+    paused: bool
+    on_restart: str
+    as_of_basis: AsOfBasis
+    bundle_sha256: str
+    python_version: str
+    validate_only: bool
+    max_error_rate: float
+    sample_events: int
+    allow_unverified: bool
+    stateful: bool
+    def __init__(self, transformer: _Optional[_Union[TransformerRef, _Mapping]] = ..., triggers: _Optional[_Iterable[_Union[TransformerInput, _Mapping]]] = ..., dependencies: _Optional[_Iterable[_Union[TransformerInput, _Mapping]]] = ..., output: _Optional[_Union[TransformerOutput, _Mapping]] = ..., code: _Optional[str] = ..., entrypoint: _Optional[str] = ..., paused: bool = ..., on_restart: _Optional[str] = ..., as_of_basis: _Optional[_Union[AsOfBasis, str]] = ..., bundle_sha256: _Optional[str] = ..., python_version: _Optional[str] = ..., validate_only: bool = ..., max_error_rate: _Optional[float] = ..., sample_events: _Optional[int] = ..., allow_unverified: bool = ..., stateful: bool = ...) -> None: ...
+
+class UploadBundleRequest(_message.Message):
+    __slots__ = ("chunk",)
+    CHUNK_FIELD_NUMBER: _ClassVar[int]
+    chunk: bytes
+    def __init__(self, chunk: _Optional[bytes] = ...) -> None: ...
+
+class UploadBundleResponse(_message.Message):
+    __slots__ = ("sha256", "size_bytes")
+    SHA256_FIELD_NUMBER: _ClassVar[int]
+    SIZE_BYTES_FIELD_NUMBER: _ClassVar[int]
+    sha256: str
+    size_bytes: int
+    def __init__(self, sha256: _Optional[str] = ..., size_bytes: _Optional[int] = ...) -> None: ...
+
+class TransformerBuild(_message.Message):
+    __slots__ = ("id", "namespace", "transformer", "status", "status_detail", "bundle_sha256", "python_version", "validate_only", "lockfile", "environment_bytes", "manifest_json", "report_json", "log", "created_at_ns", "started_at_ns", "finished_at_ns", "transformer_version", "runtime_json")
+    ID_FIELD_NUMBER: _ClassVar[int]
+    NAMESPACE_FIELD_NUMBER: _ClassVar[int]
+    TRANSFORMER_FIELD_NUMBER: _ClassVar[int]
+    STATUS_FIELD_NUMBER: _ClassVar[int]
+    STATUS_DETAIL_FIELD_NUMBER: _ClassVar[int]
+    BUNDLE_SHA256_FIELD_NUMBER: _ClassVar[int]
+    PYTHON_VERSION_FIELD_NUMBER: _ClassVar[int]
+    VALIDATE_ONLY_FIELD_NUMBER: _ClassVar[int]
+    LOCKFILE_FIELD_NUMBER: _ClassVar[int]
+    ENVIRONMENT_BYTES_FIELD_NUMBER: _ClassVar[int]
+    MANIFEST_JSON_FIELD_NUMBER: _ClassVar[int]
+    REPORT_JSON_FIELD_NUMBER: _ClassVar[int]
+    LOG_FIELD_NUMBER: _ClassVar[int]
+    CREATED_AT_NS_FIELD_NUMBER: _ClassVar[int]
+    STARTED_AT_NS_FIELD_NUMBER: _ClassVar[int]
+    FINISHED_AT_NS_FIELD_NUMBER: _ClassVar[int]
+    TRANSFORMER_VERSION_FIELD_NUMBER: _ClassVar[int]
+    RUNTIME_JSON_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    namespace: str
+    transformer: str
+    status: str
+    status_detail: str
+    bundle_sha256: str
+    python_version: str
+    validate_only: bool
+    lockfile: str
+    environment_bytes: int
+    manifest_json: str
+    report_json: str
+    log: str
+    created_at_ns: int
+    started_at_ns: int
+    finished_at_ns: int
+    transformer_version: int
+    runtime_json: str
+    def __init__(self, id: _Optional[str] = ..., namespace: _Optional[str] = ..., transformer: _Optional[str] = ..., status: _Optional[str] = ..., status_detail: _Optional[str] = ..., bundle_sha256: _Optional[str] = ..., python_version: _Optional[str] = ..., validate_only: bool = ..., lockfile: _Optional[str] = ..., environment_bytes: _Optional[int] = ..., manifest_json: _Optional[str] = ..., report_json: _Optional[str] = ..., log: _Optional[str] = ..., created_at_ns: _Optional[int] = ..., started_at_ns: _Optional[int] = ..., finished_at_ns: _Optional[int] = ..., transformer_version: _Optional[int] = ..., runtime_json: _Optional[str] = ...) -> None: ...
+
+class GetTransformerBuildRequest(_message.Message):
+    __slots__ = ("id",)
+    ID_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    def __init__(self, id: _Optional[str] = ...) -> None: ...
+
+class ListTransformerBuildsRequest(_message.Message):
+    __slots__ = ("transformer",)
+    TRANSFORMER_FIELD_NUMBER: _ClassVar[int]
+    transformer: TransformerRef
+    def __init__(self, transformer: _Optional[_Union[TransformerRef, _Mapping]] = ...) -> None: ...
+
+class ListTransformerBuildsResponse(_message.Message):
+    __slots__ = ("builds",)
+    BUILDS_FIELD_NUMBER: _ClassVar[int]
+    builds: _containers.RepeatedCompositeFieldContainer[TransformerBuild]
+    def __init__(self, builds: _Optional[_Iterable[_Union[TransformerBuild, _Mapping]]] = ...) -> None: ...
+
+class CancelTransformerBuildRequest(_message.Message):
+    __slots__ = ("id",)
+    ID_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    def __init__(self, id: _Optional[str] = ...) -> None: ...
+
+class PackageIndex(_message.Message):
+    __slots__ = ("name", "url", "credential_fields", "replaces_pypi", "created_at_ns", "updated_at_ns")
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    URL_FIELD_NUMBER: _ClassVar[int]
+    CREDENTIAL_FIELDS_FIELD_NUMBER: _ClassVar[int]
+    REPLACES_PYPI_FIELD_NUMBER: _ClassVar[int]
+    CREATED_AT_NS_FIELD_NUMBER: _ClassVar[int]
+    UPDATED_AT_NS_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    url: str
+    credential_fields: _containers.RepeatedScalarFieldContainer[str]
+    replaces_pypi: bool
+    created_at_ns: int
+    updated_at_ns: int
+    def __init__(self, name: _Optional[str] = ..., url: _Optional[str] = ..., credential_fields: _Optional[_Iterable[str]] = ..., replaces_pypi: bool = ..., created_at_ns: _Optional[int] = ..., updated_at_ns: _Optional[int] = ...) -> None: ...
+
+class CreatePackageIndexRequest(_message.Message):
+    __slots__ = ("name", "url", "replaces_pypi", "credentials_json")
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    URL_FIELD_NUMBER: _ClassVar[int]
+    REPLACES_PYPI_FIELD_NUMBER: _ClassVar[int]
+    CREDENTIALS_JSON_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    url: str
+    replaces_pypi: bool
+    credentials_json: str
+    def __init__(self, name: _Optional[str] = ..., url: _Optional[str] = ..., replaces_pypi: bool = ..., credentials_json: _Optional[str] = ...) -> None: ...
+
+class ListPackageIndexesRequest(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class ListPackageIndexesResponse(_message.Message):
+    __slots__ = ("indexes",)
+    INDEXES_FIELD_NUMBER: _ClassVar[int]
+    indexes: _containers.RepeatedCompositeFieldContainer[PackageIndex]
+    def __init__(self, indexes: _Optional[_Iterable[_Union[PackageIndex, _Mapping]]] = ...) -> None: ...
+
+class SetPackageIndexCredentialsRequest(_message.Message):
+    __slots__ = ("name", "credentials_json")
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    CREDENTIALS_JSON_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    credentials_json: str
+    def __init__(self, name: _Optional[str] = ..., credentials_json: _Optional[str] = ...) -> None: ...
+
+class DeletePackageIndexRequest(_message.Message):
+    __slots__ = ("name",)
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    def __init__(self, name: _Optional[str] = ...) -> None: ...
+
+class DeletePackageIndexResponse(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class TransformerStats(_message.Message):
+    __slots__ = ("latency_p50_ms", "latency_p95_ms", "latency_max_ms", "delivery_p50_ms", "python_ms_per_event", "dependency_ms_per_call", "send_ms_per_batch", "events_per_second", "cpu_seconds", "memory_bytes", "batches", "dependency_calls", "last_error", "lag_ms", "state_versions", "state_bytes", "syncs", "sync_ms_mean", "worker_memory_bytes", "run_seconds", "code_state_bytes", "backfill_remaining")
+    LATENCY_P50_MS_FIELD_NUMBER: _ClassVar[int]
+    LATENCY_P95_MS_FIELD_NUMBER: _ClassVar[int]
+    LATENCY_MAX_MS_FIELD_NUMBER: _ClassVar[int]
+    DELIVERY_P50_MS_FIELD_NUMBER: _ClassVar[int]
+    PYTHON_MS_PER_EVENT_FIELD_NUMBER: _ClassVar[int]
+    DEPENDENCY_MS_PER_CALL_FIELD_NUMBER: _ClassVar[int]
+    SEND_MS_PER_BATCH_FIELD_NUMBER: _ClassVar[int]
+    EVENTS_PER_SECOND_FIELD_NUMBER: _ClassVar[int]
+    CPU_SECONDS_FIELD_NUMBER: _ClassVar[int]
+    MEMORY_BYTES_FIELD_NUMBER: _ClassVar[int]
+    BATCHES_FIELD_NUMBER: _ClassVar[int]
+    DEPENDENCY_CALLS_FIELD_NUMBER: _ClassVar[int]
+    LAST_ERROR_FIELD_NUMBER: _ClassVar[int]
+    LAG_MS_FIELD_NUMBER: _ClassVar[int]
+    STATE_VERSIONS_FIELD_NUMBER: _ClassVar[int]
+    STATE_BYTES_FIELD_NUMBER: _ClassVar[int]
+    SYNCS_FIELD_NUMBER: _ClassVar[int]
+    SYNC_MS_MEAN_FIELD_NUMBER: _ClassVar[int]
+    WORKER_MEMORY_BYTES_FIELD_NUMBER: _ClassVar[int]
+    RUN_SECONDS_FIELD_NUMBER: _ClassVar[int]
+    CODE_STATE_BYTES_FIELD_NUMBER: _ClassVar[int]
+    BACKFILL_REMAINING_FIELD_NUMBER: _ClassVar[int]
+    latency_p50_ms: float
+    latency_p95_ms: float
+    latency_max_ms: float
+    delivery_p50_ms: float
+    python_ms_per_event: float
+    dependency_ms_per_call: float
+    send_ms_per_batch: float
+    events_per_second: float
+    cpu_seconds: float
+    memory_bytes: int
+    batches: int
+    dependency_calls: int
+    last_error: str
+    lag_ms: int
+    state_versions: int
+    state_bytes: int
+    syncs: int
+    sync_ms_mean: float
+    worker_memory_bytes: int
+    run_seconds: float
+    code_state_bytes: int
+    backfill_remaining: int
+    def __init__(self, latency_p50_ms: _Optional[float] = ..., latency_p95_ms: _Optional[float] = ..., latency_max_ms: _Optional[float] = ..., delivery_p50_ms: _Optional[float] = ..., python_ms_per_event: _Optional[float] = ..., dependency_ms_per_call: _Optional[float] = ..., send_ms_per_batch: _Optional[float] = ..., events_per_second: _Optional[float] = ..., cpu_seconds: _Optional[float] = ..., memory_bytes: _Optional[int] = ..., batches: _Optional[int] = ..., dependency_calls: _Optional[int] = ..., last_error: _Optional[str] = ..., lag_ms: _Optional[int] = ..., state_versions: _Optional[int] = ..., state_bytes: _Optional[int] = ..., syncs: _Optional[int] = ..., sync_ms_mean: _Optional[float] = ..., worker_memory_bytes: _Optional[int] = ..., run_seconds: _Optional[float] = ..., code_state_bytes: _Optional[int] = ..., backfill_remaining: _Optional[int] = ...) -> None: ...
+
+class Transformer(_message.Message):
+    __slots__ = ("id", "namespace", "name", "version", "triggers", "dependencies", "output", "entrypoint", "code_sha256", "paused", "status", "status_detail", "worker", "last_heartbeat_at_ns", "last_event_at_ns", "events_in", "events_out", "errors", "stats", "created_at_ns", "updated_at_ns", "service_account", "code", "on_restart", "as_of_basis", "python_version", "bundle_sha256", "manifest_json", "build", "stateful")
+    ID_FIELD_NUMBER: _ClassVar[int]
+    NAMESPACE_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    VERSION_FIELD_NUMBER: _ClassVar[int]
+    TRIGGERS_FIELD_NUMBER: _ClassVar[int]
+    DEPENDENCIES_FIELD_NUMBER: _ClassVar[int]
+    OUTPUT_FIELD_NUMBER: _ClassVar[int]
+    ENTRYPOINT_FIELD_NUMBER: _ClassVar[int]
+    CODE_SHA256_FIELD_NUMBER: _ClassVar[int]
+    PAUSED_FIELD_NUMBER: _ClassVar[int]
+    STATUS_FIELD_NUMBER: _ClassVar[int]
+    STATUS_DETAIL_FIELD_NUMBER: _ClassVar[int]
+    WORKER_FIELD_NUMBER: _ClassVar[int]
+    LAST_HEARTBEAT_AT_NS_FIELD_NUMBER: _ClassVar[int]
+    LAST_EVENT_AT_NS_FIELD_NUMBER: _ClassVar[int]
+    EVENTS_IN_FIELD_NUMBER: _ClassVar[int]
+    EVENTS_OUT_FIELD_NUMBER: _ClassVar[int]
+    ERRORS_FIELD_NUMBER: _ClassVar[int]
+    STATS_FIELD_NUMBER: _ClassVar[int]
+    CREATED_AT_NS_FIELD_NUMBER: _ClassVar[int]
+    UPDATED_AT_NS_FIELD_NUMBER: _ClassVar[int]
+    SERVICE_ACCOUNT_FIELD_NUMBER: _ClassVar[int]
+    CODE_FIELD_NUMBER: _ClassVar[int]
+    ON_RESTART_FIELD_NUMBER: _ClassVar[int]
+    AS_OF_BASIS_FIELD_NUMBER: _ClassVar[int]
+    PYTHON_VERSION_FIELD_NUMBER: _ClassVar[int]
+    BUNDLE_SHA256_FIELD_NUMBER: _ClassVar[int]
+    MANIFEST_JSON_FIELD_NUMBER: _ClassVar[int]
+    BUILD_FIELD_NUMBER: _ClassVar[int]
+    STATEFUL_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    namespace: str
+    name: str
+    version: int
+    triggers: _containers.RepeatedCompositeFieldContainer[TransformerInput]
+    dependencies: _containers.RepeatedCompositeFieldContainer[TransformerInput]
+    output: TransformerOutput
+    entrypoint: str
+    code_sha256: str
+    paused: bool
+    status: str
+    status_detail: str
+    worker: str
+    last_heartbeat_at_ns: int
+    last_event_at_ns: int
+    events_in: int
+    events_out: int
+    errors: int
+    stats: TransformerStats
+    created_at_ns: int
+    updated_at_ns: int
+    service_account: str
+    code: str
+    on_restart: str
+    as_of_basis: AsOfBasis
+    python_version: str
+    bundle_sha256: str
+    manifest_json: str
+    build: TransformerBuild
+    stateful: bool
+    def __init__(self, id: _Optional[str] = ..., namespace: _Optional[str] = ..., name: _Optional[str] = ..., version: _Optional[int] = ..., triggers: _Optional[_Iterable[_Union[TransformerInput, _Mapping]]] = ..., dependencies: _Optional[_Iterable[_Union[TransformerInput, _Mapping]]] = ..., output: _Optional[_Union[TransformerOutput, _Mapping]] = ..., entrypoint: _Optional[str] = ..., code_sha256: _Optional[str] = ..., paused: bool = ..., status: _Optional[str] = ..., status_detail: _Optional[str] = ..., worker: _Optional[str] = ..., last_heartbeat_at_ns: _Optional[int] = ..., last_event_at_ns: _Optional[int] = ..., events_in: _Optional[int] = ..., events_out: _Optional[int] = ..., errors: _Optional[int] = ..., stats: _Optional[_Union[TransformerStats, _Mapping]] = ..., created_at_ns: _Optional[int] = ..., updated_at_ns: _Optional[int] = ..., service_account: _Optional[str] = ..., code: _Optional[str] = ..., on_restart: _Optional[str] = ..., as_of_basis: _Optional[_Union[AsOfBasis, str]] = ..., python_version: _Optional[str] = ..., bundle_sha256: _Optional[str] = ..., manifest_json: _Optional[str] = ..., build: _Optional[_Union[TransformerBuild, _Mapping]] = ..., stateful: bool = ...) -> None: ...
+
+class ListTransformersRequest(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class ListTransformersResponse(_message.Message):
+    __slots__ = ("transformers",)
+    TRANSFORMERS_FIELD_NUMBER: _ClassVar[int]
+    transformers: _containers.RepeatedCompositeFieldContainer[Transformer]
+    def __init__(self, transformers: _Optional[_Iterable[_Union[Transformer, _Mapping]]] = ...) -> None: ...
+
+class GetTransformerRequest(_message.Message):
+    __slots__ = ("transformer",)
+    TRANSFORMER_FIELD_NUMBER: _ClassVar[int]
+    transformer: TransformerRef
+    def __init__(self, transformer: _Optional[_Union[TransformerRef, _Mapping]] = ...) -> None: ...
+
+class PauseTransformerRequest(_message.Message):
+    __slots__ = ("transformer",)
+    TRANSFORMER_FIELD_NUMBER: _ClassVar[int]
+    transformer: TransformerRef
+    def __init__(self, transformer: _Optional[_Union[TransformerRef, _Mapping]] = ...) -> None: ...
+
+class ResumeTransformerRequest(_message.Message):
+    __slots__ = ("transformer",)
+    TRANSFORMER_FIELD_NUMBER: _ClassVar[int]
+    transformer: TransformerRef
+    def __init__(self, transformer: _Optional[_Union[TransformerRef, _Mapping]] = ...) -> None: ...
+
+class DeleteTransformerRequest(_message.Message):
+    __slots__ = ("transformer",)
+    TRANSFORMER_FIELD_NUMBER: _ClassVar[int]
+    transformer: TransformerRef
+    def __init__(self, transformer: _Optional[_Union[TransformerRef, _Mapping]] = ...) -> None: ...
+
+class DeleteTransformerResponse(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class StartTransformerRunRequest(_message.Message):
+    __slots__ = ("transformer", "start_ns", "end_ns", "into")
+    TRANSFORMER_FIELD_NUMBER: _ClassVar[int]
+    START_NS_FIELD_NUMBER: _ClassVar[int]
+    END_NS_FIELD_NUMBER: _ClassVar[int]
+    INTO_FIELD_NUMBER: _ClassVar[int]
+    transformer: TransformerRef
+    start_ns: int
+    end_ns: int
+    into: str
+    def __init__(self, transformer: _Optional[_Union[TransformerRef, _Mapping]] = ..., start_ns: _Optional[int] = ..., end_ns: _Optional[int] = ..., into: _Optional[str] = ...) -> None: ...
+
+class TransformerRun(_message.Message):
+    __slots__ = ("id", "transformer", "version", "start_ns", "end_ns", "output", "status", "status_detail", "progress", "events_in", "events_out", "errors", "stats", "created_at_ns", "finished_at_ns")
+    ID_FIELD_NUMBER: _ClassVar[int]
+    TRANSFORMER_FIELD_NUMBER: _ClassVar[int]
+    VERSION_FIELD_NUMBER: _ClassVar[int]
+    START_NS_FIELD_NUMBER: _ClassVar[int]
+    END_NS_FIELD_NUMBER: _ClassVar[int]
+    OUTPUT_FIELD_NUMBER: _ClassVar[int]
+    STATUS_FIELD_NUMBER: _ClassVar[int]
+    STATUS_DETAIL_FIELD_NUMBER: _ClassVar[int]
+    PROGRESS_FIELD_NUMBER: _ClassVar[int]
+    EVENTS_IN_FIELD_NUMBER: _ClassVar[int]
+    EVENTS_OUT_FIELD_NUMBER: _ClassVar[int]
+    ERRORS_FIELD_NUMBER: _ClassVar[int]
+    STATS_FIELD_NUMBER: _ClassVar[int]
+    CREATED_AT_NS_FIELD_NUMBER: _ClassVar[int]
+    FINISHED_AT_NS_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    transformer: str
+    version: int
+    start_ns: int
+    end_ns: int
+    output: FeedRef
+    status: str
+    status_detail: str
+    progress: float
+    events_in: int
+    events_out: int
+    errors: int
+    stats: TransformerStats
+    created_at_ns: int
+    finished_at_ns: int
+    def __init__(self, id: _Optional[str] = ..., transformer: _Optional[str] = ..., version: _Optional[int] = ..., start_ns: _Optional[int] = ..., end_ns: _Optional[int] = ..., output: _Optional[_Union[FeedRef, _Mapping]] = ..., status: _Optional[str] = ..., status_detail: _Optional[str] = ..., progress: _Optional[float] = ..., events_in: _Optional[int] = ..., events_out: _Optional[int] = ..., errors: _Optional[int] = ..., stats: _Optional[_Union[TransformerStats, _Mapping]] = ..., created_at_ns: _Optional[int] = ..., finished_at_ns: _Optional[int] = ...) -> None: ...
+
+class ListTransformerRunsRequest(_message.Message):
+    __slots__ = ("transformer",)
+    TRANSFORMER_FIELD_NUMBER: _ClassVar[int]
+    transformer: TransformerRef
+    def __init__(self, transformer: _Optional[_Union[TransformerRef, _Mapping]] = ...) -> None: ...
+
+class ListTransformerRunsResponse(_message.Message):
+    __slots__ = ("runs",)
+    RUNS_FIELD_NUMBER: _ClassVar[int]
+    runs: _containers.RepeatedCompositeFieldContainer[TransformerRun]
+    def __init__(self, runs: _Optional[_Iterable[_Union[TransformerRun, _Mapping]]] = ...) -> None: ...
+
+class GetTransformerRunRequest(_message.Message):
+    __slots__ = ("id",)
+    ID_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    def __init__(self, id: _Optional[str] = ...) -> None: ...
+
+class CancelTransformerRunRequest(_message.Message):
+    __slots__ = ("id",)
+    ID_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    def __init__(self, id: _Optional[str] = ...) -> None: ...

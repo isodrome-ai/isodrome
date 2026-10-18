@@ -10,7 +10,7 @@ from isodrome import errors
 from isodrome._transport import Transport
 from isodrome.config import Config
 from isodrome._feed import Feed, FeedList
-from isodrome.parse import format_ns, short_enum
+from isodrome.parse import feed_ref, format_ns, short_enum
 from isodrome.v1 import isodrome_pb2 as pb
 
 if TYPE_CHECKING:
@@ -168,15 +168,95 @@ class Client:
         return Feed(self, meta, pb.FeedRef(namespace=meta.namespace, name=meta.name))
 
     def _ref(self, ref: str) -> pb.FeedRef:
-        parts = ref.split("/")
-        if len(parts) > 3 or not all(parts):
-            raise ValueError(f"{ref!r}: expected FEED, NAMESPACE/FEED or ORGANIZATION/NAMESPACE/FEED")
-        if len(parts) == 3:
-            return pb.FeedRef(organization=parts[0], namespace=parts[1], name=parts[2])
-        if len(parts) == 2:
-            return pb.FeedRef(namespace=parts[0], name=parts[1])
         organization, _, ns = self._namespace.rpartition("/")
-        return pb.FeedRef(organization=organization, namespace=ns, name=ref)
+        return feed_ref(ref, organization, ns)
+
+    # ----- transformers -----
+
+    def transformers(self):
+        """The organization's transformers, as a DataFrame."""
+        import pandas as pd
+
+        listed = errors.call(self._transport.call, "ListTransformers", pb.ListTransformersRequest()).transformers
+        return pd.DataFrame([{
+            "transformer": f"{t.namespace}/{t.name}", "version": t.version, "status": t.status,
+            "stateful": t.stateful, "backfill_remaining": t.stats.backfill_remaining,
+            "events_in": t.events_in, "events_out": t.events_out, "errors": t.errors,
+        } for t in listed])
+
+    def transformer(self, name: str, namespace: str | None = None) -> TransformerInfo:
+        t = errors.call(self._transport.call, "GetTransformer", pb.GetTransformerRequest(
+            transformer=pb.TransformerRef(namespace=namespace or "", name=name)))
+        return TransformerInfo(self, t)
+
+    def deploy_transformer(self, path=".", *, name: str = "", namespace: str = "", state: bool = False,
+                           test: bool = False, wait: bool = True, progress: bool = True, **overrides):
+        """Deploys a project (a directory whose code declares transformers) or one .py file, and
+        waits: through the build's phases (verifying a stateful transformer replays its whole
+        history, so this can take minutes), then through its backfill until it is live.
+        `test=True` builds and verifies without deploying. Overrides: python, triggers,
+        dependencies, windows, output, key, time, publication_time, entrypoint, basis,
+        on_restart, paused, max_error_rate, sample_events, allow_unverified.
+
+        Returns the build (`.status`, `.report_json`); raises if it did not become ready."""
+        from isodrome import deploy
+
+        say = _say(progress)
+        o = deploy.Overrides(name=name, namespace=namespace, state=state, **overrides)
+        build = deploy.start(self._transport, path, o, validate_only=test, on_message=say)
+        say(f"build {build.id} {build.status}")
+        if not wait:
+            return build
+        build = deploy.wait_for_build(
+            self._transport, build,
+            on_phase=lambda b, s: say(f"  {s:>6.1f} s  {b.status}"),
+            on_tick=lambda b, s: say(f"  {s:>6.1f} s  still {b.status}"),
+        )
+        for line in deploy.describe_build(build):
+            say(line)
+        if build.status != "ready":
+            raise errors.FailedPrecondition(f"{build.status}: {build.status_detail or 'see the report'}")
+        if not test and not o.paused:
+            seen = {"n": None}
+
+            def on_progress(t, s):
+                n = t.stats.backfill_remaining
+                if n and n != seen["n"]:
+                    say(f"  {s:>6.1f} s  backfill: {n:,} trigger events to replay")
+                    seen["n"] = n
+
+            t = deploy.wait_for_backfill(self._transport, build, on_progress=on_progress)
+            say(f"{t.name} v{t.version} is live")
+        return build
+
+    def test_transformer(self, path=".", **options):
+        """Builds and verifies a project like deploy_transformer, without deploying it."""
+        return self.deploy_transformer(path, test=True, **options)
+
+    def run_transformer(self, name: str, start, end, *, into: str = "", namespace: str = "",
+                        wait: bool = True, progress: bool = True) -> pb.TransformerRun:
+        """A backtest: the triggers' events with event time in [start, end), replayed exactly as
+        live saw them (a stateful transformer's state warmed up from the first trigger event),
+        into `into` (default NAME_run). Waits for it unless `wait=False`; read the result with
+        `iso.feed(run.output...)` or `client.feed(...)`."""
+        import time as _time
+
+        from isodrome.parse import to_ns
+
+        say = _say(progress)
+        run = errors.call(self._transport.call, "StartTransformerRun", pb.StartTransformerRunRequest(
+            transformer=pb.TransformerRef(namespace=namespace, name=name),
+            start_ns=to_ns(start), end_ns=to_ns(end), into=into))
+        last = None
+        while wait and run.status not in ("done", "failed", "cancelled"):
+            _time.sleep(1)
+            run = errors.call(self._transport.call, "GetTransformerRun", pb.GetTransformerRunRequest(id=run.id))
+            if (run.status, round(run.progress, 2)) != last:
+                say(f"  run {run.status} {run.progress * 100:5.1f}%  {run.events_in:,} in, {run.events_out:,} out")
+                last = (run.status, round(run.progress, 2))
+        if wait and run.status != "done":
+            raise errors.FailedPrecondition(f"run {run.status}: {run.status_detail}")
+        return run
 
     # ----- lifecycle and display -----
 
@@ -213,3 +293,52 @@ class Client:
         rows = "".join(f"<tr><th style='text-align:left;padding-right:1em'>{html.escape(k)}</th>"
                        f"<td style='text-align:left'>{html.escape(v)}</td></tr>" for k, v in self._identity())
         return f"<table>{rows}</table>"
+
+
+# ---------- Transformers ----------
+
+
+class TransformerInfo:
+    """A deployed transformer, as last fetched (`refresh()` fetches again)."""
+
+    def __init__(self, client: Client, t: pb.Transformer):
+        self._client = client
+        self._t = t
+
+    name = property(lambda self: self._t.name)
+    namespace = property(lambda self: self._t.namespace)
+    version = property(lambda self: self._t.version)
+    status = property(lambda self: self._t.status)
+    stateful = property(lambda self: self._t.stateful)
+    stats = property(lambda self: self._t.stats)
+    backfill_remaining = property(lambda self: self._t.stats.backfill_remaining)
+    proto = property(lambda self: self._t)
+
+    @property
+    def output(self) -> str:
+        """The feed it writes, as a reference for `iso.feed(...)`."""
+        p = self._t.output.pinned
+        return f"{p.organization}/{p.namespace}/{p.name}" if p.organization else f"{p.namespace}/{p.name}"
+
+    def refresh(self) -> TransformerInfo:
+        self._t = errors.call(self._client._transport.call, "GetTransformer", pb.GetTransformerRequest(
+            transformer=pb.TransformerRef(namespace=self._t.namespace, name=self._t.name)))
+        return self
+
+    def run(self, start, end, into: str = "", wait: bool = True, progress: bool = True):
+        """A backtest over trigger events with event time in [start, end); see Client.run_transformer."""
+        return self._client.run_transformer(self.name, start, end, into=into, namespace=self.namespace,
+                                            wait=wait, progress=progress)
+
+    def __repr__(self) -> str:
+        from isodrome.deploy import describe_transformer
+
+        return "\n".join(describe_transformer(self._t))
+
+
+def _say(enabled: bool):
+    import sys
+
+    return (lambda text: print(text, file=sys.stderr, flush=True)) if enabled else (lambda text: None)
+
+

@@ -8,7 +8,9 @@ import click
 import grpc
 
 from isodrome._transport import API_VERSION, Transport
+from isodrome.errors import IsodromeError
 from isodrome.config import Config, Profile
+from isodrome.parse import feed_ref as parse_feed_ref
 from isodrome.v1 import isodrome_pb2 as pb
 
 # Hints for errors a person can do something about.
@@ -71,18 +73,15 @@ class Context:
         return "" if organization else namespace
 
     def feed_ref(self, ref: str, namespace: str | None) -> pb.FeedRef:
-        """`feed`, `namespace/feed` or `organization/namespace/feed` → a FeedRef."""
-        parts = ref.split("/")
-        if len(parts) > 3 or not all(parts):
-            raise click.BadParameter(f"{ref!r}: expected FEED, NAMESPACE/FEED or ORGANIZATION/NAMESPACE/FEED")
-        if len(parts) > 1 and namespace:
+        """`feed`, `namespace/feed` or `organization/namespace/feed`, optionally `@version` or
+        `:tag` (e.g. `prices@2`, `prices:prod`) → a FeedRef."""
+        if "/" in ref and namespace:
             raise click.UsageError(f"{ref!r} names its namespace already; leave out --namespace")
-        if len(parts) == 3:
-            return pb.FeedRef(organization=parts[0], namespace=parts[1], name=parts[2])
-        if len(parts) == 2:
-            return pb.FeedRef(namespace=parts[0], name=parts[1])
         organization, ns = self.scope(namespace)
-        return pb.FeedRef(organization=organization, namespace=ns, name=ref)
+        try:
+            return parse_feed_ref(ref, organization, ns)
+        except ValueError as e:
+            raise click.BadParameter(str(e)) from None
 
     def writable_ref(self, ref: str, namespace: str | None) -> pb.FeedRef:
         """A FeedRef for a change, which only your own organization's feeds allow."""
@@ -141,6 +140,11 @@ class Group(click.Group):
             if os.environ.get("ISODROME_DEBUG"):
                 raise
             raise click.ClickException(rpc_error_message(e)) from None
+        except IsodromeError as e:
+            if os.environ.get("ISODROME_DEBUG"):
+                raise
+            hint = _HINTS.get(e.code)
+            raise click.ClickException(str(e) + (f"\n  ({hint})" if hint and hint not in str(e) else "")) from None
         except KeyboardInterrupt:
             raise click.exceptions.Exit(130) from None
 

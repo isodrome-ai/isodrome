@@ -9,7 +9,7 @@ import pytest
 
 from fakes import ipc
 
-from isodrome import output, push
+from isodrome import _output as output, push
 from isodrome._transport import DEFAULT_ENDPOINT, Endpoint, key_id
 from isodrome.config import Config, Profile, config_path
 

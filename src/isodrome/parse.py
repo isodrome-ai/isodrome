@@ -192,3 +192,34 @@ def to_duration_ns(value) -> int:
     if hasattr(value, "total_seconds"):
         return (value.days * 86_400 + value.seconds) * 1_000_000_000 + value.microseconds * 1_000
     raise TypeError(f"not a duration: {value!r} (use e.g. '24h' or a timedelta)")
+
+
+def split_version(name: str) -> tuple[str, int, str]:
+    """`prices@2` → ("prices", 2, ""); `prices:prod` → ("prices", 0, "prod"); `prices` → ("prices", 0, "")."""
+    if "@" in name:
+        base, _, version = name.partition("@")
+        if not version.isdigit() or int(version) < 1:
+            raise ValueError(f"{name!r}: a version is a number from 1, e.g. prices@2")
+        return base, int(version), ""
+    if ":" in name:
+        base, _, tag = name.partition(":")
+        if not tag:
+            raise ValueError(f"{name!r}: a tag follows the colon, e.g. prices:prod")
+        return base, 0, tag
+    return name, 0, ""
+
+
+def feed_ref(ref: str, default_organization: str = "", default_namespace: str = ""):
+    """`FEED`, `NAMESPACE/FEED` or `ORG/NAMESPACE/FEED`, each optionally `@version` or `:tag`
+    → a FeedRef."""
+    parts = ref.split("/")
+    if len(parts) > 3 or not all(parts):
+        raise ValueError(f"{ref!r}: expected FEED, NAMESPACE/FEED or ORGANIZATION/NAMESPACE/FEED")
+    name, version, tag = split_version(parts[-1])
+    if len(parts) == 3:
+        organization, namespace = parts[0], parts[1]
+    elif len(parts) == 2:
+        organization, namespace = "", parts[0]
+    else:
+        organization, namespace = default_organization, default_namespace
+    return pb.FeedRef(organization=organization, namespace=namespace, name=name, version=version, tag=tag)

@@ -7,12 +7,17 @@
     forecast = client.feed("isodrome/public/ecmwf_open_data_forecast")
     df = forecast.query(since="3d", where={"_key": "dublin-airport"}).to_df()
 
-`iso.feed(...)` and `iso.feeds()` use a default connection, made on first use.
+`iso.feed(...)`, `iso.feeds()`, `iso.read(...)`, `iso.latest(...)` and `iso.subscribe(...)` use a
+default connection, made on first use.
+
+Transformers (Python that Isodrome runs on feeds' events) are declared with `@iso.transformer`,
+`iso.feed(...)` and `iso.output(...)`; see isodrome.transformers.
 """
 
 from __future__ import annotations
 
 from isodrome._version import __version__
+from isodrome.transformers import feed, get, latest, output, read, subscribe, transformer
 from isodrome.errors import (
     AlreadyExists,
     FailedPrecondition,
@@ -30,6 +35,12 @@ __all__ = [
     "connect",
     "feed",
     "feeds",
+    "read",
+    "latest",
+    "subscribe",
+    "get",
+    "transformer",
+    "output",
     "namespaces",
     "col",
     "as_of_join",
@@ -84,11 +95,6 @@ def _client():
 
         _default = connect()
     return _default
-
-
-def feed(ref: str):
-    """A feed, using the default connection: `iso.feed("isodrome/public/met_eireann_observations")`."""
-    return _client().feed(ref)
 
 
 def feeds(**options):
