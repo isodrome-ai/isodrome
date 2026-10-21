@@ -64,13 +64,18 @@ one event to the next: running totals, ratings, standings.
   is checked to read back unchanged.
 - At most **2 MB** serialised (`stats.code_state_bytes` shows its size).
 - It is **only ever what replaying the triggers gives**. Each new version (the first deploy and
-  every redeploy) first **backfills**, replaying every trigger event in the basis's order
-  (`stats.backfill_remaining` counts down), then goes live. A backtest warms it up from the very
-  first trigger event. It is **never carried** from one version to the next, and cannot be set
-  from outside.
+  every redeploy) replays every trigger event in the basis's order before it goes live. A
+  backtest warms it up from the very first trigger event. It is **never carried** from one
+  version to the next, and cannot be set from outside.
+- **Verification is the backfill**: a stateful build's verification replays the whole history
+  in the sandbox, and the version it deploys publishes that replay's outputs and continues from
+  its final state, rather than replaying it again. So a stateful deploy takes as long as the
+  replay: minutes for years of history.
+- Each stateful version writes a **new version of its output feed**: a bare read gets the
+  latest, and `feed@1` keeps the first version's history, so histories never mix. A transformer
+  reading the old version goes on reading it until it is redeployed too.
 - `on_restart="latest"` is refused with state: skipping events would make the state something no
   replay gives.
-- Verification replays the whole history too, so a stateful deploy can take minutes.
 
 ## Fixtures
 
@@ -110,8 +115,11 @@ Both upload the project, have Isodrome install its requirements, then verify it:
 
 While it waits, the CLI shows the build's phases (`queued`, `building`, `verifying`, `ready`),
 and a line every 30 seconds through a long verification (a stateful transformer's replays its
-whole history; there is no timeout). After a deploy is ready it shows the backfill counting down
-until the new version is live. A failed build never changes the running version.
+whole history; there is no timeout). After a deploy is ready it waits until the new version is
+live, showing any backfill still to replay. A failed build never changes the running version.
+
+Not in `iso` yet: `run-local` (a backtest on your machine) and `deploy --local-backfill` (the
+history replayed on your machine and verified by sampling). Both are in `isodrome-dev` for now.
 
 The same from Python:
 

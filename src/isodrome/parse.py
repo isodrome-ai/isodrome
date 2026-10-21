@@ -80,8 +80,12 @@ def format_ns(ns: int) -> str:
 
 
 def short_enum(enum_type, value: int) -> str:
-    """`pb.AckMode`, 1 → `replicated`."""
-    name = enum_type.Name(value)
+    """`pb.AckMode`, 1 → `replicated`. A value this client does not know (a newer server's) is
+    shown as `unknown (N)` rather than failing: servers add enum values within an API version."""
+    try:
+        name = enum_type.Name(value)
+    except ValueError:
+        return f"unknown ({value})"
     prefix = enum_type.DESCRIPTOR.values[0].name.rsplit("_", 1)[0] + "_"  # e.g. ACK_MODE_
     return name.removeprefix(prefix).lower()
 

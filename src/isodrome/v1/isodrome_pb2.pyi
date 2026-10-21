@@ -13,6 +13,7 @@ class Role(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     ROLE_ADMIN: _ClassVar[Role]
     ROLE_WRITER: _ClassVar[Role]
     ROLE_READER: _ClassVar[Role]
+    ROLE_OWNER: _ClassVar[Role]
 
 class CredentialKind(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -99,10 +100,28 @@ class UsageBucket(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     USAGE_BUCKET_MINUTE: _ClassVar[UsageBucket]
     USAGE_BUCKET_HOUR: _ClassVar[UsageBucket]
     USAGE_BUCKET_DAY: _ClassVar[UsageBucket]
+
+class EdgeKind(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    EDGE_KIND_UNSPECIFIED: _ClassVar[EdgeKind]
+    EDGE_KIND_WRITES: _ClassVar[EdgeKind]
+    EDGE_KIND_TRIGGERS: _ClassVar[EdgeKind]
+    EDGE_KIND_DEPENDS_ON: _ClassVar[EdgeKind]
+
+class HealthState(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    HEALTH_STATE_UNSPECIFIED: _ClassVar[HealthState]
+    HEALTH_STATE_HEALTHY: _ClassVar[HealthState]
+    HEALTH_STATE_DEGRADED: _ClassVar[HealthState]
+    HEALTH_STATE_FAILING: _ClassVar[HealthState]
+    HEALTH_STATE_STALE: _ClassVar[HealthState]
+    HEALTH_STATE_PAUSED: _ClassVar[HealthState]
+    HEALTH_STATE_PENDING: _ClassVar[HealthState]
 ROLE_UNSPECIFIED: Role
 ROLE_ADMIN: Role
 ROLE_WRITER: Role
 ROLE_READER: Role
+ROLE_OWNER: Role
 CREDENTIAL_KIND_UNSPECIFIED: CredentialKind
 CREDENTIAL_KIND_API_KEY: CredentialKind
 CREDENTIAL_KIND_SESSION: CredentialKind
@@ -156,6 +175,17 @@ USAGE_BUCKET_UNSPECIFIED: UsageBucket
 USAGE_BUCKET_MINUTE: UsageBucket
 USAGE_BUCKET_HOUR: UsageBucket
 USAGE_BUCKET_DAY: UsageBucket
+EDGE_KIND_UNSPECIFIED: EdgeKind
+EDGE_KIND_WRITES: EdgeKind
+EDGE_KIND_TRIGGERS: EdgeKind
+EDGE_KIND_DEPENDS_ON: EdgeKind
+HEALTH_STATE_UNSPECIFIED: HealthState
+HEALTH_STATE_HEALTHY: HealthState
+HEALTH_STATE_DEGRADED: HealthState
+HEALTH_STATE_FAILING: HealthState
+HEALTH_STATE_STALE: HealthState
+HEALTH_STATE_PAUSED: HealthState
+HEALTH_STATE_PENDING: HealthState
 
 class GetServerInfoRequest(_message.Message):
     __slots__ = ()
@@ -184,7 +214,7 @@ class WhoAmIRequest(_message.Message):
     def __init__(self) -> None: ...
 
 class WhoAmIResponse(_message.Message):
-    __slots__ = ("organization", "default_namespace", "role", "key_id", "email", "kind", "expires_at_ns", "service_account")
+    __slots__ = ("organization", "default_namespace", "role", "key_id", "email", "kind", "expires_at_ns", "service_account", "allowed_actions")
     ORGANIZATION_FIELD_NUMBER: _ClassVar[int]
     DEFAULT_NAMESPACE_FIELD_NUMBER: _ClassVar[int]
     ROLE_FIELD_NUMBER: _ClassVar[int]
@@ -193,6 +223,7 @@ class WhoAmIResponse(_message.Message):
     KIND_FIELD_NUMBER: _ClassVar[int]
     EXPIRES_AT_NS_FIELD_NUMBER: _ClassVar[int]
     SERVICE_ACCOUNT_FIELD_NUMBER: _ClassVar[int]
+    ALLOWED_ACTIONS_FIELD_NUMBER: _ClassVar[int]
     organization: str
     default_namespace: str
     role: Role
@@ -201,23 +232,26 @@ class WhoAmIResponse(_message.Message):
     kind: CredentialKind
     expires_at_ns: int
     service_account: str
-    def __init__(self, organization: _Optional[str] = ..., default_namespace: _Optional[str] = ..., role: _Optional[_Union[Role, str]] = ..., key_id: _Optional[str] = ..., email: _Optional[str] = ..., kind: _Optional[_Union[CredentialKind, str]] = ..., expires_at_ns: _Optional[int] = ..., service_account: _Optional[str] = ...) -> None: ...
+    allowed_actions: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, organization: _Optional[str] = ..., default_namespace: _Optional[str] = ..., role: _Optional[_Union[Role, str]] = ..., key_id: _Optional[str] = ..., email: _Optional[str] = ..., kind: _Optional[_Union[CredentialKind, str]] = ..., expires_at_ns: _Optional[int] = ..., service_account: _Optional[str] = ..., allowed_actions: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class Namespace(_message.Message):
-    __slots__ = ("id", "organization", "name", "created_at_ns", "public", "owner")
+    __slots__ = ("id", "organization", "name", "created_at_ns", "public", "owner", "protected")
     ID_FIELD_NUMBER: _ClassVar[int]
     ORGANIZATION_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     CREATED_AT_NS_FIELD_NUMBER: _ClassVar[int]
     PUBLIC_FIELD_NUMBER: _ClassVar[int]
     OWNER_FIELD_NUMBER: _ClassVar[int]
+    PROTECTED_FIELD_NUMBER: _ClassVar[int]
     id: str
     organization: str
     name: str
     created_at_ns: int
     public: bool
     owner: str
-    def __init__(self, id: _Optional[str] = ..., organization: _Optional[str] = ..., name: _Optional[str] = ..., created_at_ns: _Optional[int] = ..., public: bool = ..., owner: _Optional[str] = ...) -> None: ...
+    protected: bool
+    def __init__(self, id: _Optional[str] = ..., organization: _Optional[str] = ..., name: _Optional[str] = ..., created_at_ns: _Optional[int] = ..., public: bool = ..., owner: _Optional[str] = ..., protected: bool = ...) -> None: ...
 
 class CreateNamespaceRequest(_message.Message):
     __slots__ = ("name", "public")
@@ -228,12 +262,14 @@ class CreateNamespaceRequest(_message.Message):
     def __init__(self, name: _Optional[str] = ..., public: bool = ...) -> None: ...
 
 class UpdateNamespaceRequest(_message.Message):
-    __slots__ = ("name", "public")
+    __slots__ = ("name", "public", "new_name")
     NAME_FIELD_NUMBER: _ClassVar[int]
     PUBLIC_FIELD_NUMBER: _ClassVar[int]
+    NEW_NAME_FIELD_NUMBER: _ClassVar[int]
     name: str
     public: bool
-    def __init__(self, name: _Optional[str] = ..., public: bool = ...) -> None: ...
+    new_name: str
+    def __init__(self, name: _Optional[str] = ..., public: bool = ..., new_name: _Optional[str] = ...) -> None: ...
 
 class ListNamespacesRequest(_message.Message):
     __slots__ = ("public",)
@@ -358,6 +394,118 @@ class RevokeApiKeyRequest(_message.Message):
     KEY_ID_FIELD_NUMBER: _ClassVar[int]
     key_id: str
     def __init__(self, key_id: _Optional[str] = ...) -> None: ...
+
+class PlanLimits(_message.Message):
+    __slots__ = ("partition_months", "events", "stored_gb_months", "read_gb", "transformers", "transformer_vcpu_hours")
+    PARTITION_MONTHS_FIELD_NUMBER: _ClassVar[int]
+    EVENTS_FIELD_NUMBER: _ClassVar[int]
+    STORED_GB_MONTHS_FIELD_NUMBER: _ClassVar[int]
+    READ_GB_FIELD_NUMBER: _ClassVar[int]
+    TRANSFORMERS_FIELD_NUMBER: _ClassVar[int]
+    TRANSFORMER_VCPU_HOURS_FIELD_NUMBER: _ClassVar[int]
+    partition_months: int
+    events: int
+    stored_gb_months: int
+    read_gb: int
+    transformers: int
+    transformer_vcpu_hours: int
+    def __init__(self, partition_months: _Optional[int] = ..., events: _Optional[int] = ..., stored_gb_months: _Optional[int] = ..., read_gb: _Optional[int] = ..., transformers: _Optional[int] = ..., transformer_vcpu_hours: _Optional[int] = ...) -> None: ...
+
+class Plan(_message.Message):
+    __slots__ = ("id", "name", "limits", "available", "max_owned_per_person")
+    ID_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    LIMITS_FIELD_NUMBER: _ClassVar[int]
+    AVAILABLE_FIELD_NUMBER: _ClassVar[int]
+    MAX_OWNED_PER_PERSON_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    name: str
+    limits: PlanLimits
+    available: bool
+    max_owned_per_person: int
+    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., limits: _Optional[_Union[PlanLimits, _Mapping]] = ..., available: bool = ..., max_owned_per_person: _Optional[int] = ...) -> None: ...
+
+class Organization(_message.Message):
+    __slots__ = ("id", "name", "owner", "plan", "member_count", "created_at_ns")
+    ID_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    OWNER_FIELD_NUMBER: _ClassVar[int]
+    PLAN_FIELD_NUMBER: _ClassVar[int]
+    MEMBER_COUNT_FIELD_NUMBER: _ClassVar[int]
+    CREATED_AT_NS_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    name: str
+    owner: str
+    plan: Plan
+    member_count: int
+    created_at_ns: int
+    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., owner: _Optional[str] = ..., plan: _Optional[_Union[Plan, _Mapping]] = ..., member_count: _Optional[int] = ..., created_at_ns: _Optional[int] = ...) -> None: ...
+
+class OrganizationMembership(_message.Message):
+    __slots__ = ("id", "name", "role", "plan", "current")
+    ID_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    ROLE_FIELD_NUMBER: _ClassVar[int]
+    PLAN_FIELD_NUMBER: _ClassVar[int]
+    CURRENT_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    name: str
+    role: Role
+    plan: Plan
+    current: bool
+    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., role: _Optional[_Union[Role, str]] = ..., plan: _Optional[_Union[Plan, _Mapping]] = ..., current: bool = ...) -> None: ...
+
+class ListMyOrganizationsRequest(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class ListMyOrganizationsResponse(_message.Message):
+    __slots__ = ("organizations",)
+    ORGANIZATIONS_FIELD_NUMBER: _ClassVar[int]
+    organizations: _containers.RepeatedCompositeFieldContainer[OrganizationMembership]
+    def __init__(self, organizations: _Optional[_Iterable[_Union[OrganizationMembership, _Mapping]]] = ...) -> None: ...
+
+class GetOrganizationRequest(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class Member(_message.Message):
+    __slots__ = ("email", "role", "joined_at_ns")
+    EMAIL_FIELD_NUMBER: _ClassVar[int]
+    ROLE_FIELD_NUMBER: _ClassVar[int]
+    JOINED_AT_NS_FIELD_NUMBER: _ClassVar[int]
+    email: str
+    role: Role
+    joined_at_ns: int
+    def __init__(self, email: _Optional[str] = ..., role: _Optional[_Union[Role, str]] = ..., joined_at_ns: _Optional[int] = ...) -> None: ...
+
+class ListMembersRequest(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class ListMembersResponse(_message.Message):
+    __slots__ = ("members",)
+    MEMBERS_FIELD_NUMBER: _ClassVar[int]
+    members: _containers.RepeatedCompositeFieldContainer[Member]
+    def __init__(self, members: _Optional[_Iterable[_Union[Member, _Mapping]]] = ...) -> None: ...
+
+class CreateOrganizationRequest(_message.Message):
+    __slots__ = ("name", "plan")
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    PLAN_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    plan: str
+    def __init__(self, name: _Optional[str] = ..., plan: _Optional[str] = ...) -> None: ...
+
+class ListPlansRequest(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class ListPlansResponse(_message.Message):
+    __slots__ = ("plans",)
+    PLANS_FIELD_NUMBER: _ClassVar[int]
+    plans: _containers.RepeatedCompositeFieldContainer[Plan]
+    def __init__(self, plans: _Optional[_Iterable[_Union[Plan, _Mapping]]] = ...) -> None: ...
 
 class FeedRef(_message.Message):
     __slots__ = ("namespace", "name", "organization", "version", "tag")
@@ -618,6 +766,22 @@ class UndeleteFeedRequest(_message.Message):
     id: str
     def __init__(self, feed: _Optional[_Union[FeedRef, _Mapping]] = ..., id: _Optional[str] = ...) -> None: ...
 
+class MoveFeedRequest(_message.Message):
+    __slots__ = ("feed", "namespace", "name")
+    FEED_FIELD_NUMBER: _ClassVar[int]
+    NAMESPACE_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    feed: FeedRef
+    namespace: str
+    name: str
+    def __init__(self, feed: _Optional[_Union[FeedRef, _Mapping]] = ..., namespace: _Optional[str] = ..., name: _Optional[str] = ...) -> None: ...
+
+class MoveFeedResponse(_message.Message):
+    __slots__ = ("feeds",)
+    FEEDS_FIELD_NUMBER: _ClassVar[int]
+    feeds: _containers.RepeatedCompositeFieldContainer[Feed]
+    def __init__(self, feeds: _Optional[_Iterable[_Union[Feed, _Mapping]]] = ...) -> None: ...
+
 class GetFeedRequest(_message.Message):
     __slots__ = ("feed",)
     FEED_FIELD_NUMBER: _ClassVar[int]
@@ -643,16 +807,18 @@ class ListFeedsResponse(_message.Message):
     def __init__(self, feeds: _Optional[_Iterable[_Union[Feed, _Mapping]]] = ...) -> None: ...
 
 class Event(_message.Message):
-    __slots__ = ("payload", "event_time_ns", "message_id", "published_time_ns")
+    __slots__ = ("payload", "event_time_ns", "message_id", "published_time_ns", "trace")
     PAYLOAD_FIELD_NUMBER: _ClassVar[int]
     EVENT_TIME_NS_FIELD_NUMBER: _ClassVar[int]
     MESSAGE_ID_FIELD_NUMBER: _ClassVar[int]
     PUBLISHED_TIME_NS_FIELD_NUMBER: _ClassVar[int]
+    TRACE_FIELD_NUMBER: _ClassVar[int]
     payload: bytes
     event_time_ns: int
     message_id: str
     published_time_ns: int
-    def __init__(self, payload: _Optional[bytes] = ..., event_time_ns: _Optional[int] = ..., message_id: _Optional[str] = ..., published_time_ns: _Optional[int] = ...) -> None: ...
+    trace: str
+    def __init__(self, payload: _Optional[bytes] = ..., event_time_ns: _Optional[int] = ..., message_id: _Optional[str] = ..., published_time_ns: _Optional[int] = ..., trace: _Optional[str] = ...) -> None: ...
 
 class SendRequest(_message.Message):
     __slots__ = ("feed", "events")
@@ -855,7 +1021,7 @@ class SubscribeResponse(_message.Message):
     def __init__(self, batch: _Optional[_Union[ArrowBatch, _Mapping]] = ..., caught_up: _Optional[_Union[CaughtUp, _Mapping]] = ..., heartbeat: _Optional[_Union[Heartbeat, _Mapping]] = ...) -> None: ...
 
 class ConnectorTemplate(_message.Message):
-    __slots__ = ("name", "version", "description", "options_example", "feeds", "poll_interval_ms", "credentials")
+    __slots__ = ("name", "version", "description", "options_example", "feeds", "poll_interval_ms", "credentials", "options_schema", "title", "provider", "category", "tags", "docs_url", "cost_note", "deprecated", "deprecated_reason")
     NAME_FIELD_NUMBER: _ClassVar[int]
     VERSION_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
@@ -863,6 +1029,15 @@ class ConnectorTemplate(_message.Message):
     FEEDS_FIELD_NUMBER: _ClassVar[int]
     POLL_INTERVAL_MS_FIELD_NUMBER: _ClassVar[int]
     CREDENTIALS_FIELD_NUMBER: _ClassVar[int]
+    OPTIONS_SCHEMA_FIELD_NUMBER: _ClassVar[int]
+    TITLE_FIELD_NUMBER: _ClassVar[int]
+    PROVIDER_FIELD_NUMBER: _ClassVar[int]
+    CATEGORY_FIELD_NUMBER: _ClassVar[int]
+    TAGS_FIELD_NUMBER: _ClassVar[int]
+    DOCS_URL_FIELD_NUMBER: _ClassVar[int]
+    COST_NOTE_FIELD_NUMBER: _ClassVar[int]
+    DEPRECATED_FIELD_NUMBER: _ClassVar[int]
+    DEPRECATED_REASON_FIELD_NUMBER: _ClassVar[int]
     name: str
     version: int
     description: str
@@ -870,15 +1045,34 @@ class ConnectorTemplate(_message.Message):
     feeds: _containers.RepeatedCompositeFieldContainer[ConnectorFeed]
     poll_interval_ms: int
     credentials: _containers.RepeatedCompositeFieldContainer[ConnectorCredential]
-    def __init__(self, name: _Optional[str] = ..., version: _Optional[int] = ..., description: _Optional[str] = ..., options_example: _Optional[str] = ..., feeds: _Optional[_Iterable[_Union[ConnectorFeed, _Mapping]]] = ..., poll_interval_ms: _Optional[int] = ..., credentials: _Optional[_Iterable[_Union[ConnectorCredential, _Mapping]]] = ...) -> None: ...
+    options_schema: str
+    title: str
+    provider: str
+    category: str
+    tags: _containers.RepeatedScalarFieldContainer[str]
+    docs_url: str
+    cost_note: str
+    deprecated: bool
+    deprecated_reason: str
+    def __init__(self, name: _Optional[str] = ..., version: _Optional[int] = ..., description: _Optional[str] = ..., options_example: _Optional[str] = ..., feeds: _Optional[_Iterable[_Union[ConnectorFeed, _Mapping]]] = ..., poll_interval_ms: _Optional[int] = ..., credentials: _Optional[_Iterable[_Union[ConnectorCredential, _Mapping]]] = ..., options_schema: _Optional[str] = ..., title: _Optional[str] = ..., provider: _Optional[str] = ..., category: _Optional[str] = ..., tags: _Optional[_Iterable[str]] = ..., docs_url: _Optional[str] = ..., cost_note: _Optional[str] = ..., deprecated: bool = ..., deprecated_reason: _Optional[str] = ...) -> None: ...
 
 class ConnectorCredential(_message.Message):
-    __slots__ = ("name", "description")
+    __slots__ = ("name", "description", "title", "required", "multiline", "secret_recommended", "docs_url")
     NAME_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
+    TITLE_FIELD_NUMBER: _ClassVar[int]
+    REQUIRED_FIELD_NUMBER: _ClassVar[int]
+    MULTILINE_FIELD_NUMBER: _ClassVar[int]
+    SECRET_RECOMMENDED_FIELD_NUMBER: _ClassVar[int]
+    DOCS_URL_FIELD_NUMBER: _ClassVar[int]
     name: str
     description: str
-    def __init__(self, name: _Optional[str] = ..., description: _Optional[str] = ...) -> None: ...
+    title: str
+    required: bool
+    multiline: bool
+    secret_recommended: bool
+    docs_url: str
+    def __init__(self, name: _Optional[str] = ..., description: _Optional[str] = ..., title: _Optional[str] = ..., required: bool = ..., multiline: bool = ..., secret_recommended: bool = ..., docs_url: _Optional[str] = ...) -> None: ...
 
 class ConnectorFeed(_message.Message):
     __slots__ = ("name", "key_field", "time_field", "publication_time_field", "description", "licence", "attribution", "source_url")
@@ -911,7 +1105,14 @@ class ListConnectorTemplatesResponse(_message.Message):
     def __init__(self, templates: _Optional[_Iterable[_Union[ConnectorTemplate, _Mapping]]] = ...) -> None: ...
 
 class Connection(_message.Message):
-    __slots__ = ("id", "name", "template", "namespace", "options_json", "service_account", "paused", "status", "status_detail", "cursor_json", "worker", "last_heartbeat_at_ns", "last_event_at_ns", "events_sent", "created_at_ns", "feeds", "credential_fields", "credentials_set_at_ns")
+    __slots__ = ("id", "name", "template", "namespace", "options_json", "service_account", "paused", "status", "status_detail", "cursor_json", "worker", "last_heartbeat_at_ns", "last_event_at_ns", "events_sent", "created_at_ns", "feeds", "credential_fields", "credentials_set_at_ns", "secrets", "last_poll_duration_ms", "consecutive_failures", "last_failure_at_ns", "feed_prefix", "feed_names", "last_poll_at_ns", "next_poll_at_ns", "template_version", "adopted_feeds")
+    class FeedNamesEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: str
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
     ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     TEMPLATE_FIELD_NUMBER: _ClassVar[int]
@@ -930,6 +1131,16 @@ class Connection(_message.Message):
     FEEDS_FIELD_NUMBER: _ClassVar[int]
     CREDENTIAL_FIELDS_FIELD_NUMBER: _ClassVar[int]
     CREDENTIALS_SET_AT_NS_FIELD_NUMBER: _ClassVar[int]
+    SECRETS_FIELD_NUMBER: _ClassVar[int]
+    LAST_POLL_DURATION_MS_FIELD_NUMBER: _ClassVar[int]
+    CONSECUTIVE_FAILURES_FIELD_NUMBER: _ClassVar[int]
+    LAST_FAILURE_AT_NS_FIELD_NUMBER: _ClassVar[int]
+    FEED_PREFIX_FIELD_NUMBER: _ClassVar[int]
+    FEED_NAMES_FIELD_NUMBER: _ClassVar[int]
+    LAST_POLL_AT_NS_FIELD_NUMBER: _ClassVar[int]
+    NEXT_POLL_AT_NS_FIELD_NUMBER: _ClassVar[int]
+    TEMPLATE_VERSION_FIELD_NUMBER: _ClassVar[int]
+    ADOPTED_FEEDS_FIELD_NUMBER: _ClassVar[int]
     id: str
     name: str
     template: str
@@ -948,23 +1159,47 @@ class Connection(_message.Message):
     feeds: _containers.RepeatedScalarFieldContainer[str]
     credential_fields: _containers.RepeatedScalarFieldContainer[str]
     credentials_set_at_ns: int
-    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., template: _Optional[str] = ..., namespace: _Optional[str] = ..., options_json: _Optional[str] = ..., service_account: _Optional[str] = ..., paused: bool = ..., status: _Optional[str] = ..., status_detail: _Optional[str] = ..., cursor_json: _Optional[str] = ..., worker: _Optional[str] = ..., last_heartbeat_at_ns: _Optional[int] = ..., last_event_at_ns: _Optional[int] = ..., events_sent: _Optional[int] = ..., created_at_ns: _Optional[int] = ..., feeds: _Optional[_Iterable[str]] = ..., credential_fields: _Optional[_Iterable[str]] = ..., credentials_set_at_ns: _Optional[int] = ...) -> None: ...
+    secrets: _containers.RepeatedCompositeFieldContainer[SecretVersion]
+    last_poll_duration_ms: int
+    consecutive_failures: int
+    last_failure_at_ns: int
+    feed_prefix: str
+    feed_names: _containers.ScalarMap[str, str]
+    last_poll_at_ns: int
+    next_poll_at_ns: int
+    template_version: int
+    adopted_feeds: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., template: _Optional[str] = ..., namespace: _Optional[str] = ..., options_json: _Optional[str] = ..., service_account: _Optional[str] = ..., paused: bool = ..., status: _Optional[str] = ..., status_detail: _Optional[str] = ..., cursor_json: _Optional[str] = ..., worker: _Optional[str] = ..., last_heartbeat_at_ns: _Optional[int] = ..., last_event_at_ns: _Optional[int] = ..., events_sent: _Optional[int] = ..., created_at_ns: _Optional[int] = ..., feeds: _Optional[_Iterable[str]] = ..., credential_fields: _Optional[_Iterable[str]] = ..., credentials_set_at_ns: _Optional[int] = ..., secrets: _Optional[_Iterable[_Union[SecretVersion, _Mapping]]] = ..., last_poll_duration_ms: _Optional[int] = ..., consecutive_failures: _Optional[int] = ..., last_failure_at_ns: _Optional[int] = ..., feed_prefix: _Optional[str] = ..., feed_names: _Optional[_Mapping[str, str]] = ..., last_poll_at_ns: _Optional[int] = ..., next_poll_at_ns: _Optional[int] = ..., template_version: _Optional[int] = ..., adopted_feeds: _Optional[_Iterable[str]] = ...) -> None: ...
+
+class SecretVersion(_message.Message):
+    __slots__ = ("name", "version", "current")
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    VERSION_FIELD_NUMBER: _ClassVar[int]
+    CURRENT_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    version: int
+    current: int
+    def __init__(self, name: _Optional[str] = ..., version: _Optional[int] = ..., current: _Optional[int] = ...) -> None: ...
 
 class CreateConnectionRequest(_message.Message):
-    __slots__ = ("name", "template", "namespace", "options_json", "paused", "credentials_json")
+    __slots__ = ("name", "template", "namespace", "options_json", "paused", "credentials_json", "feed_prefix", "validate_only")
     NAME_FIELD_NUMBER: _ClassVar[int]
     TEMPLATE_FIELD_NUMBER: _ClassVar[int]
     NAMESPACE_FIELD_NUMBER: _ClassVar[int]
     OPTIONS_JSON_FIELD_NUMBER: _ClassVar[int]
     PAUSED_FIELD_NUMBER: _ClassVar[int]
     CREDENTIALS_JSON_FIELD_NUMBER: _ClassVar[int]
+    FEED_PREFIX_FIELD_NUMBER: _ClassVar[int]
+    VALIDATE_ONLY_FIELD_NUMBER: _ClassVar[int]
     name: str
     template: str
     namespace: str
     options_json: str
     paused: bool
     credentials_json: str
-    def __init__(self, name: _Optional[str] = ..., template: _Optional[str] = ..., namespace: _Optional[str] = ..., options_json: _Optional[str] = ..., paused: bool = ..., credentials_json: _Optional[str] = ...) -> None: ...
+    feed_prefix: str
+    validate_only: bool
+    def __init__(self, name: _Optional[str] = ..., template: _Optional[str] = ..., namespace: _Optional[str] = ..., options_json: _Optional[str] = ..., paused: bool = ..., credentials_json: _Optional[str] = ..., feed_prefix: _Optional[str] = ..., validate_only: bool = ...) -> None: ...
 
 class SetConnectionCredentialsRequest(_message.Message):
     __slots__ = ("name", "credentials_json")
@@ -973,6 +1208,120 @@ class SetConnectionCredentialsRequest(_message.Message):
     name: str
     credentials_json: str
     def __init__(self, name: _Optional[str] = ..., credentials_json: _Optional[str] = ...) -> None: ...
+
+class RestartConnectionRequest(_message.Message):
+    __slots__ = ("name",)
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    def __init__(self, name: _Optional[str] = ...) -> None: ...
+
+class SetSecretRequest(_message.Message):
+    __slots__ = ("name", "value")
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    VALUE_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    value: str
+    def __init__(self, name: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
+
+class Secret(_message.Message):
+    __slots__ = ("name", "fields", "backend", "created_at_ns", "updated_at_ns", "used_by", "version", "uses")
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    FIELDS_FIELD_NUMBER: _ClassVar[int]
+    BACKEND_FIELD_NUMBER: _ClassVar[int]
+    CREATED_AT_NS_FIELD_NUMBER: _ClassVar[int]
+    UPDATED_AT_NS_FIELD_NUMBER: _ClassVar[int]
+    USED_BY_FIELD_NUMBER: _ClassVar[int]
+    VERSION_FIELD_NUMBER: _ClassVar[int]
+    USES_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    fields: _containers.RepeatedScalarFieldContainer[str]
+    backend: str
+    created_at_ns: int
+    updated_at_ns: int
+    used_by: _containers.RepeatedScalarFieldContainer[str]
+    version: int
+    uses: _containers.RepeatedCompositeFieldContainer[SecretUse]
+    def __init__(self, name: _Optional[str] = ..., fields: _Optional[_Iterable[str]] = ..., backend: _Optional[str] = ..., created_at_ns: _Optional[int] = ..., updated_at_ns: _Optional[int] = ..., used_by: _Optional[_Iterable[str]] = ..., version: _Optional[int] = ..., uses: _Optional[_Iterable[_Union[SecretUse, _Mapping]]] = ...) -> None: ...
+
+class SecretUse(_message.Message):
+    __slots__ = ("connection", "version", "status")
+    CONNECTION_FIELD_NUMBER: _ClassVar[int]
+    VERSION_FIELD_NUMBER: _ClassVar[int]
+    STATUS_FIELD_NUMBER: _ClassVar[int]
+    connection: str
+    version: int
+    status: str
+    def __init__(self, connection: _Optional[str] = ..., version: _Optional[int] = ..., status: _Optional[str] = ...) -> None: ...
+
+class EventDetails(_message.Message):
+    __slots__ = ("sport", "league", "start_time_ns", "home", "away", "source", "source_event_id")
+    SPORT_FIELD_NUMBER: _ClassVar[int]
+    LEAGUE_FIELD_NUMBER: _ClassVar[int]
+    START_TIME_NS_FIELD_NUMBER: _ClassVar[int]
+    HOME_FIELD_NUMBER: _ClassVar[int]
+    AWAY_FIELD_NUMBER: _ClassVar[int]
+    SOURCE_FIELD_NUMBER: _ClassVar[int]
+    SOURCE_EVENT_ID_FIELD_NUMBER: _ClassVar[int]
+    sport: str
+    league: str
+    start_time_ns: int
+    home: str
+    away: str
+    source: str
+    source_event_id: str
+    def __init__(self, sport: _Optional[str] = ..., league: _Optional[str] = ..., start_time_ns: _Optional[int] = ..., home: _Optional[str] = ..., away: _Optional[str] = ..., source: _Optional[str] = ..., source_event_id: _Optional[str] = ...) -> None: ...
+
+class ResolveEventsRequest(_message.Message):
+    __slots__ = ("events", "lookup_only")
+    EVENTS_FIELD_NUMBER: _ClassVar[int]
+    LOOKUP_ONLY_FIELD_NUMBER: _ClassVar[int]
+    events: _containers.RepeatedCompositeFieldContainer[EventDetails]
+    lookup_only: bool
+    def __init__(self, events: _Optional[_Iterable[_Union[EventDetails, _Mapping]]] = ..., lookup_only: bool = ...) -> None: ...
+
+class ResolvedEvent(_message.Message):
+    __slots__ = ("event_id", "confidence", "method", "error", "home", "away", "start_time_ns")
+    EVENT_ID_FIELD_NUMBER: _ClassVar[int]
+    CONFIDENCE_FIELD_NUMBER: _ClassVar[int]
+    METHOD_FIELD_NUMBER: _ClassVar[int]
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    HOME_FIELD_NUMBER: _ClassVar[int]
+    AWAY_FIELD_NUMBER: _ClassVar[int]
+    START_TIME_NS_FIELD_NUMBER: _ClassVar[int]
+    event_id: str
+    confidence: float
+    method: str
+    error: str
+    home: str
+    away: str
+    start_time_ns: int
+    def __init__(self, event_id: _Optional[str] = ..., confidence: _Optional[float] = ..., method: _Optional[str] = ..., error: _Optional[str] = ..., home: _Optional[str] = ..., away: _Optional[str] = ..., start_time_ns: _Optional[int] = ...) -> None: ...
+
+class ResolveEventsResponse(_message.Message):
+    __slots__ = ("events",)
+    EVENTS_FIELD_NUMBER: _ClassVar[int]
+    events: _containers.RepeatedCompositeFieldContainer[ResolvedEvent]
+    def __init__(self, events: _Optional[_Iterable[_Union[ResolvedEvent, _Mapping]]] = ...) -> None: ...
+
+class ListSecretsRequest(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class ListSecretsResponse(_message.Message):
+    __slots__ = ("secrets",)
+    SECRETS_FIELD_NUMBER: _ClassVar[int]
+    secrets: _containers.RepeatedCompositeFieldContainer[Secret]
+    def __init__(self, secrets: _Optional[_Iterable[_Union[Secret, _Mapping]]] = ...) -> None: ...
+
+class DeleteSecretRequest(_message.Message):
+    __slots__ = ("name",)
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    def __init__(self, name: _Optional[str] = ...) -> None: ...
+
+class DeleteSecretResponse(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
 
 class ListConnectionsRequest(_message.Message):
     __slots__ = ()
@@ -1007,6 +1356,24 @@ class DeleteConnectionRequest(_message.Message):
     NAME_FIELD_NUMBER: _ClassVar[int]
     name: str
     def __init__(self, name: _Optional[str] = ...) -> None: ...
+
+class UpdateConnectionRequest(_message.Message):
+    __slots__ = ("name", "new_name", "namespace", "feed_prefix", "options_json", "validate_only", "reset_cursor")
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    NEW_NAME_FIELD_NUMBER: _ClassVar[int]
+    NAMESPACE_FIELD_NUMBER: _ClassVar[int]
+    FEED_PREFIX_FIELD_NUMBER: _ClassVar[int]
+    OPTIONS_JSON_FIELD_NUMBER: _ClassVar[int]
+    VALIDATE_ONLY_FIELD_NUMBER: _ClassVar[int]
+    RESET_CURSOR_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    new_name: str
+    namespace: str
+    feed_prefix: str
+    options_json: str
+    validate_only: bool
+    reset_cursor: bool
+    def __init__(self, name: _Optional[str] = ..., new_name: _Optional[str] = ..., namespace: _Optional[str] = ..., feed_prefix: _Optional[str] = ..., options_json: _Optional[str] = ..., validate_only: bool = ..., reset_cursor: bool = ...) -> None: ...
 
 class DeleteConnectionResponse(_message.Message):
     __slots__ = ()
@@ -1145,7 +1512,7 @@ class TransformerOutput(_message.Message):
     def __init__(self, feed: _Optional[str] = ..., key_field: _Optional[str] = ..., time_field: _Optional[str] = ..., publication_time_field: _Optional[str] = ..., description: _Optional[str] = ..., pinned: _Optional[_Union[FeedRef, _Mapping]] = ...) -> None: ...
 
 class DeployTransformerRequest(_message.Message):
-    __slots__ = ("transformer", "triggers", "dependencies", "output", "code", "entrypoint", "paused", "on_restart", "as_of_basis", "bundle_sha256", "python_version", "validate_only", "max_error_rate", "sample_events", "allow_unverified", "stateful")
+    __slots__ = ("transformer", "triggers", "dependencies", "output", "code", "entrypoint", "paused", "on_restart", "as_of_basis", "bundle_sha256", "python_version", "validate_only", "max_error_rate", "sample_events", "allow_unverified", "stateful", "backfill_sha256")
     TRANSFORMER_FIELD_NUMBER: _ClassVar[int]
     TRIGGERS_FIELD_NUMBER: _ClassVar[int]
     DEPENDENCIES_FIELD_NUMBER: _ClassVar[int]
@@ -1162,6 +1529,7 @@ class DeployTransformerRequest(_message.Message):
     SAMPLE_EVENTS_FIELD_NUMBER: _ClassVar[int]
     ALLOW_UNVERIFIED_FIELD_NUMBER: _ClassVar[int]
     STATEFUL_FIELD_NUMBER: _ClassVar[int]
+    BACKFILL_SHA256_FIELD_NUMBER: _ClassVar[int]
     transformer: TransformerRef
     triggers: _containers.RepeatedCompositeFieldContainer[TransformerInput]
     dependencies: _containers.RepeatedCompositeFieldContainer[TransformerInput]
@@ -1178,7 +1546,8 @@ class DeployTransformerRequest(_message.Message):
     sample_events: int
     allow_unverified: bool
     stateful: bool
-    def __init__(self, transformer: _Optional[_Union[TransformerRef, _Mapping]] = ..., triggers: _Optional[_Iterable[_Union[TransformerInput, _Mapping]]] = ..., dependencies: _Optional[_Iterable[_Union[TransformerInput, _Mapping]]] = ..., output: _Optional[_Union[TransformerOutput, _Mapping]] = ..., code: _Optional[str] = ..., entrypoint: _Optional[str] = ..., paused: bool = ..., on_restart: _Optional[str] = ..., as_of_basis: _Optional[_Union[AsOfBasis, str]] = ..., bundle_sha256: _Optional[str] = ..., python_version: _Optional[str] = ..., validate_only: bool = ..., max_error_rate: _Optional[float] = ..., sample_events: _Optional[int] = ..., allow_unverified: bool = ..., stateful: bool = ...) -> None: ...
+    backfill_sha256: str
+    def __init__(self, transformer: _Optional[_Union[TransformerRef, _Mapping]] = ..., triggers: _Optional[_Iterable[_Union[TransformerInput, _Mapping]]] = ..., dependencies: _Optional[_Iterable[_Union[TransformerInput, _Mapping]]] = ..., output: _Optional[_Union[TransformerOutput, _Mapping]] = ..., code: _Optional[str] = ..., entrypoint: _Optional[str] = ..., paused: bool = ..., on_restart: _Optional[str] = ..., as_of_basis: _Optional[_Union[AsOfBasis, str]] = ..., bundle_sha256: _Optional[str] = ..., python_version: _Optional[str] = ..., validate_only: bool = ..., max_error_rate: _Optional[float] = ..., sample_events: _Optional[int] = ..., allow_unverified: bool = ..., stateful: bool = ..., backfill_sha256: _Optional[str] = ...) -> None: ...
 
 class UploadBundleRequest(_message.Message):
     __slots__ = ("chunk",)
@@ -1315,7 +1684,7 @@ class DeletePackageIndexResponse(_message.Message):
     def __init__(self) -> None: ...
 
 class TransformerStats(_message.Message):
-    __slots__ = ("latency_p50_ms", "latency_p95_ms", "latency_max_ms", "delivery_p50_ms", "python_ms_per_event", "dependency_ms_per_call", "send_ms_per_batch", "events_per_second", "cpu_seconds", "memory_bytes", "batches", "dependency_calls", "last_error", "lag_ms", "state_versions", "state_bytes", "syncs", "sync_ms_mean", "worker_memory_bytes", "run_seconds", "code_state_bytes", "backfill_remaining")
+    __slots__ = ("latency_p50_ms", "latency_p95_ms", "latency_max_ms", "delivery_p50_ms", "python_ms_per_event", "dependency_ms_per_call", "send_ms_per_batch", "events_per_second", "cpu_seconds", "memory_bytes", "batches", "dependency_calls", "last_error", "lag_ms", "state_versions", "state_bytes", "syncs", "sync_ms_mean", "worker_memory_bytes", "run_seconds", "code_state_bytes", "backfill_remaining", "catch_up_events", "catch_up_max_ms", "history_unpublished", "queued_p50_ms", "harness_ms_per_batch", "worker_ms_per_batch")
     LATENCY_P50_MS_FIELD_NUMBER: _ClassVar[int]
     LATENCY_P95_MS_FIELD_NUMBER: _ClassVar[int]
     LATENCY_MAX_MS_FIELD_NUMBER: _ClassVar[int]
@@ -1338,6 +1707,12 @@ class TransformerStats(_message.Message):
     RUN_SECONDS_FIELD_NUMBER: _ClassVar[int]
     CODE_STATE_BYTES_FIELD_NUMBER: _ClassVar[int]
     BACKFILL_REMAINING_FIELD_NUMBER: _ClassVar[int]
+    CATCH_UP_EVENTS_FIELD_NUMBER: _ClassVar[int]
+    CATCH_UP_MAX_MS_FIELD_NUMBER: _ClassVar[int]
+    HISTORY_UNPUBLISHED_FIELD_NUMBER: _ClassVar[int]
+    QUEUED_P50_MS_FIELD_NUMBER: _ClassVar[int]
+    HARNESS_MS_PER_BATCH_FIELD_NUMBER: _ClassVar[int]
+    WORKER_MS_PER_BATCH_FIELD_NUMBER: _ClassVar[int]
     latency_p50_ms: float
     latency_p95_ms: float
     latency_max_ms: float
@@ -1360,7 +1735,13 @@ class TransformerStats(_message.Message):
     run_seconds: float
     code_state_bytes: int
     backfill_remaining: int
-    def __init__(self, latency_p50_ms: _Optional[float] = ..., latency_p95_ms: _Optional[float] = ..., latency_max_ms: _Optional[float] = ..., delivery_p50_ms: _Optional[float] = ..., python_ms_per_event: _Optional[float] = ..., dependency_ms_per_call: _Optional[float] = ..., send_ms_per_batch: _Optional[float] = ..., events_per_second: _Optional[float] = ..., cpu_seconds: _Optional[float] = ..., memory_bytes: _Optional[int] = ..., batches: _Optional[int] = ..., dependency_calls: _Optional[int] = ..., last_error: _Optional[str] = ..., lag_ms: _Optional[int] = ..., state_versions: _Optional[int] = ..., state_bytes: _Optional[int] = ..., syncs: _Optional[int] = ..., sync_ms_mean: _Optional[float] = ..., worker_memory_bytes: _Optional[int] = ..., run_seconds: _Optional[float] = ..., code_state_bytes: _Optional[int] = ..., backfill_remaining: _Optional[int] = ...) -> None: ...
+    catch_up_events: int
+    catch_up_max_ms: float
+    history_unpublished: int
+    queued_p50_ms: float
+    harness_ms_per_batch: float
+    worker_ms_per_batch: float
+    def __init__(self, latency_p50_ms: _Optional[float] = ..., latency_p95_ms: _Optional[float] = ..., latency_max_ms: _Optional[float] = ..., delivery_p50_ms: _Optional[float] = ..., python_ms_per_event: _Optional[float] = ..., dependency_ms_per_call: _Optional[float] = ..., send_ms_per_batch: _Optional[float] = ..., events_per_second: _Optional[float] = ..., cpu_seconds: _Optional[float] = ..., memory_bytes: _Optional[int] = ..., batches: _Optional[int] = ..., dependency_calls: _Optional[int] = ..., last_error: _Optional[str] = ..., lag_ms: _Optional[int] = ..., state_versions: _Optional[int] = ..., state_bytes: _Optional[int] = ..., syncs: _Optional[int] = ..., sync_ms_mean: _Optional[float] = ..., worker_memory_bytes: _Optional[int] = ..., run_seconds: _Optional[float] = ..., code_state_bytes: _Optional[int] = ..., backfill_remaining: _Optional[int] = ..., catch_up_events: _Optional[int] = ..., catch_up_max_ms: _Optional[float] = ..., history_unpublished: _Optional[int] = ..., queued_p50_ms: _Optional[float] = ..., harness_ms_per_batch: _Optional[float] = ..., worker_ms_per_batch: _Optional[float] = ...) -> None: ...
 
 class Transformer(_message.Message):
     __slots__ = ("id", "namespace", "name", "version", "triggers", "dependencies", "output", "entrypoint", "code_sha256", "paused", "status", "status_detail", "worker", "last_heartbeat_at_ns", "last_event_at_ns", "events_in", "events_out", "errors", "stats", "created_at_ns", "updated_at_ns", "service_account", "code", "on_restart", "as_of_basis", "python_version", "bundle_sha256", "manifest_json", "build", "stateful")
@@ -1464,6 +1845,14 @@ class DeleteTransformerResponse(_message.Message):
     __slots__ = ()
     def __init__(self) -> None: ...
 
+class UpdateTransformerRequest(_message.Message):
+    __slots__ = ("transformer", "new_name")
+    TRANSFORMER_FIELD_NUMBER: _ClassVar[int]
+    NEW_NAME_FIELD_NUMBER: _ClassVar[int]
+    transformer: TransformerRef
+    new_name: str
+    def __init__(self, transformer: _Optional[_Union[TransformerRef, _Mapping]] = ..., new_name: _Optional[str] = ...) -> None: ...
+
 class StartTransformerRunRequest(_message.Message):
     __slots__ = ("transformer", "start_ns", "end_ns", "into")
     TRANSFORMER_FIELD_NUMBER: _ClassVar[int]
@@ -1533,3 +1922,116 @@ class CancelTransformerRunRequest(_message.Message):
     ID_FIELD_NUMBER: _ClassVar[int]
     id: str
     def __init__(self, id: _Optional[str] = ...) -> None: ...
+
+class GetPipelineRequest(_message.Message):
+    __slots__ = ("namespace",)
+    NAMESPACE_FIELD_NUMBER: _ClassVar[int]
+    namespace: str
+    def __init__(self, namespace: _Optional[str] = ...) -> None: ...
+
+class Pipeline(_message.Message):
+    __slots__ = ("nodes", "edges", "generated_at_ns")
+    NODES_FIELD_NUMBER: _ClassVar[int]
+    EDGES_FIELD_NUMBER: _ClassVar[int]
+    GENERATED_AT_NS_FIELD_NUMBER: _ClassVar[int]
+    nodes: _containers.RepeatedCompositeFieldContainer[PipelineNode]
+    edges: _containers.RepeatedCompositeFieldContainer[PipelineEdge]
+    generated_at_ns: int
+    def __init__(self, nodes: _Optional[_Iterable[_Union[PipelineNode, _Mapping]]] = ..., edges: _Optional[_Iterable[_Union[PipelineEdge, _Mapping]]] = ..., generated_at_ns: _Optional[int] = ...) -> None: ...
+
+class PipelineNode(_message.Message):
+    __slots__ = ("id", "connection", "feed", "transformer", "external_feed", "health", "figures", "boundary")
+    ID_FIELD_NUMBER: _ClassVar[int]
+    CONNECTION_FIELD_NUMBER: _ClassVar[int]
+    FEED_FIELD_NUMBER: _ClassVar[int]
+    TRANSFORMER_FIELD_NUMBER: _ClassVar[int]
+    EXTERNAL_FEED_FIELD_NUMBER: _ClassVar[int]
+    HEALTH_FIELD_NUMBER: _ClassVar[int]
+    FIGURES_FIELD_NUMBER: _ClassVar[int]
+    BOUNDARY_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    connection: Connection
+    feed: Feed
+    transformer: Transformer
+    external_feed: FeedRef
+    health: Health
+    figures: NodeFigures
+    boundary: bool
+    def __init__(self, id: _Optional[str] = ..., connection: _Optional[_Union[Connection, _Mapping]] = ..., feed: _Optional[_Union[Feed, _Mapping]] = ..., transformer: _Optional[_Union[Transformer, _Mapping]] = ..., external_feed: _Optional[_Union[FeedRef, _Mapping]] = ..., health: _Optional[_Union[Health, _Mapping]] = ..., figures: _Optional[_Union[NodeFigures, _Mapping]] = ..., boundary: bool = ...) -> None: ...
+
+class PipelineEdge(_message.Message):
+    __slots__ = ("to", "kind")
+    FROM_FIELD_NUMBER: _ClassVar[int]
+    TO_FIELD_NUMBER: _ClassVar[int]
+    KIND_FIELD_NUMBER: _ClassVar[int]
+    to: str
+    kind: EdgeKind
+    def __init__(self, to: _Optional[str] = ..., kind: _Optional[_Union[EdgeKind, str]] = ..., **kwargs) -> None: ...
+
+class Health(_message.Message):
+    __slots__ = ("state", "reason")
+    STATE_FIELD_NUMBER: _ClassVar[int]
+    REASON_FIELD_NUMBER: _ClassVar[int]
+    state: HealthState
+    reason: str
+    def __init__(self, state: _Optional[_Union[HealthState, str]] = ..., reason: _Optional[str] = ...) -> None: ...
+
+class NodeFigures(_message.Message):
+    __slots__ = ("events_per_minute", "events_per_minute_series", "latency_p50_ms", "latency_p95_ms", "lag_ms", "last_activity_ns", "errors_last_hour", "events_total")
+    EVENTS_PER_MINUTE_FIELD_NUMBER: _ClassVar[int]
+    EVENTS_PER_MINUTE_SERIES_FIELD_NUMBER: _ClassVar[int]
+    LATENCY_P50_MS_FIELD_NUMBER: _ClassVar[int]
+    LATENCY_P95_MS_FIELD_NUMBER: _ClassVar[int]
+    LAG_MS_FIELD_NUMBER: _ClassVar[int]
+    LAST_ACTIVITY_NS_FIELD_NUMBER: _ClassVar[int]
+    ERRORS_LAST_HOUR_FIELD_NUMBER: _ClassVar[int]
+    EVENTS_TOTAL_FIELD_NUMBER: _ClassVar[int]
+    events_per_minute: float
+    events_per_minute_series: _containers.RepeatedScalarFieldContainer[float]
+    latency_p50_ms: int
+    latency_p95_ms: int
+    lag_ms: int
+    last_activity_ns: int
+    errors_last_hour: int
+    events_total: int
+    def __init__(self, events_per_minute: _Optional[float] = ..., events_per_minute_series: _Optional[_Iterable[float]] = ..., latency_p50_ms: _Optional[int] = ..., latency_p95_ms: _Optional[int] = ..., lag_ms: _Optional[int] = ..., last_activity_ns: _Optional[int] = ..., errors_last_hour: _Optional[int] = ..., events_total: _Optional[int] = ...) -> None: ...
+
+class WatchPipelineRequest(_message.Message):
+    __slots__ = ("namespace", "nodes")
+    NAMESPACE_FIELD_NUMBER: _ClassVar[int]
+    NODES_FIELD_NUMBER: _ClassVar[int]
+    namespace: str
+    nodes: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, namespace: _Optional[str] = ..., nodes: _Optional[_Iterable[str]] = ...) -> None: ...
+
+class PipelineUpdate(_message.Message):
+    __slots__ = ("snapshot", "nodes", "event", "heartbeat")
+    SNAPSHOT_FIELD_NUMBER: _ClassVar[int]
+    NODES_FIELD_NUMBER: _ClassVar[int]
+    EVENT_FIELD_NUMBER: _ClassVar[int]
+    HEARTBEAT_FIELD_NUMBER: _ClassVar[int]
+    snapshot: Pipeline
+    nodes: NodesChanged
+    event: PipelineEvent
+    heartbeat: Heartbeat
+    def __init__(self, snapshot: _Optional[_Union[Pipeline, _Mapping]] = ..., nodes: _Optional[_Union[NodesChanged, _Mapping]] = ..., event: _Optional[_Union[PipelineEvent, _Mapping]] = ..., heartbeat: _Optional[_Union[Heartbeat, _Mapping]] = ...) -> None: ...
+
+class NodesChanged(_message.Message):
+    __slots__ = ("nodes", "generated_at_ns")
+    NODES_FIELD_NUMBER: _ClassVar[int]
+    GENERATED_AT_NS_FIELD_NUMBER: _ClassVar[int]
+    nodes: _containers.RepeatedCompositeFieldContainer[PipelineNode]
+    generated_at_ns: int
+    def __init__(self, nodes: _Optional[_Iterable[_Union[PipelineNode, _Mapping]]] = ..., generated_at_ns: _Optional[int] = ...) -> None: ...
+
+class PipelineEvent(_message.Message):
+    __slots__ = ("at_ns", "node", "kind", "detail")
+    AT_NS_FIELD_NUMBER: _ClassVar[int]
+    NODE_FIELD_NUMBER: _ClassVar[int]
+    KIND_FIELD_NUMBER: _ClassVar[int]
+    DETAIL_FIELD_NUMBER: _ClassVar[int]
+    at_ns: int
+    node: str
+    kind: str
+    detail: str
+    def __init__(self, at_ns: _Optional[int] = ..., node: _Optional[str] = ..., kind: _Optional[str] = ..., detail: _Optional[str] = ...) -> None: ...

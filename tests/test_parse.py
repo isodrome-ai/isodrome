@@ -66,5 +66,7 @@ def test_positions():
 def test_short_enum():
     assert short_enum(pb.AckMode, pb.ACK_MODE_REPLICATED) == "replicated"
     assert short_enum(pb.Role, pb.ROLE_ADMIN) == "admin"
+    assert short_enum(pb.Role, pb.ROLE_OWNER) == "owner"
+    assert short_enum(pb.Role, 99) == "unknown (99)"   # a newer server's value
     assert short_enum(pb.ColumnType, pb.COLUMN_TYPE_FLOAT64) == "float64"
     assert short_enum(pb.RejectionReason, pb.REJECTION_REASON_MISSING_EVENT_TIME) == "missing_event_time"

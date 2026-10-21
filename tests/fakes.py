@@ -35,6 +35,7 @@ class FakeIsodrome(pb_grpc.IsodromeServicer):
         self.connections: list[pb.Connection] = []
         self.requests: list[str] = []
         self.capabilities: list[str] = []
+        self.role = pb.ROLE_ADMIN
         self._init_transformers()
         self.estimate = (0, 0)
         self.feeds: dict[tuple[str, str], pb.Feed] = {}
@@ -91,7 +92,7 @@ class FakeIsodrome(pb_grpc.IsodromeServicer):
     def WhoAmI(self, request, context):
         self._auth(context)
         return pb.WhoAmIResponse(
-            organization="acme", default_namespace="default", role=pb.ROLE_ADMIN, key_id="testkey", email="a@acme.io",
+            organization="acme", default_namespace="default", role=self.role, key_id="testkey", email="a@acme.io",
             kind=pb.CREDENTIAL_KIND_SESSION, expires_at_ns=SESSION_EXPIRES_NS,
         )
 

@@ -9,6 +9,7 @@ from fakes import KEY, FakeSignIn
 from isodrome import login as device_flow
 from isodrome.cli import cli
 from isodrome.config import Config
+from isodrome.v1 import isodrome_pb2 as pb
 
 
 def test_not_logged_in(iso):
@@ -278,3 +279,16 @@ def test_query_tables_hide_internals(iso, fake):
     assert header == ["_event_time", "price", "_payload"]  # no _partition; _key all empty
     assert "_partition" in iso("feed", "query", "t", "--system").stdout.splitlines()[0]
     assert "_partition" in iso("feed", "query", "t", "-o", "json").stdout
+
+
+def test_an_organizations_owner_can_log_in_and_see_who_they_are(iso, fake):
+    """Owners (ROLE_OWNER, added by the server after v1's first release) made login and whoami
+    crash; a role this client does not know yet must not either."""
+    fake.role = pb.ROLE_OWNER
+    login = iso("login", "--api-key", KEY, key=False)
+    assert login.exit_code == 0, login.output
+    assert "role owner" in login.output
+    assert "role:              owner" in iso("whoami").output
+    fake.role = 99   # from a newer server still
+    shown = iso("whoami")
+    assert shown.exit_code == 0 and "role:              unknown (99)" in shown.output
