@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, Iterable
 import pyarrow as pa
 
 from isodrome import errors
-from isodrome.output import decode
+from isodrome._output import decode
 from isodrome.parse import format_ns, format_position, parse_position, to_duration_ns, to_ns
 from isodrome.result import Result
 from isodrome.v1 import isodrome_pb2 as pb

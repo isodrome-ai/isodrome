@@ -8,7 +8,7 @@ from pathlib import Path
 
 import click
 
-from isodrome import output
+from isodrome import _output as output
 from isodrome import push as pusher
 from isodrome.cli.context import Context, namespace_option, pass_context
 from isodrome.parse import (
@@ -328,7 +328,10 @@ def feed_update(
 @click.option("-y", "--yes", is_flag=True, help="Do not ask for confirmation.")
 @pass_context
 def feed_delete(ctx: Context, feed_ref, namespace, yes) -> None:
-    """Delete a feed. It can be undeleted until its data is purged (7 days by default)."""
+    """Delete a feed. It can be undeleted until its data is purged (7 days by default).
+
+    Refused while a connection writes to it or a transformer writes or reads it: delete those
+    first (the error names them)."""
     ref = ctx.writable_ref(feed_ref, namespace)
     if not yes:
         click.confirm(f"Delete feed {ref.namespace or '(default)'}/{ref.name}?", abort=True, err=True)
@@ -560,13 +563,15 @@ def feed_push(ctx: Context, name, namespace, data, files, batch_size, quiet) -> 
 @click.option("--limit", default=100, show_default=True, help="Most rows to return; 0 for all.")
 @click.option("--payload", is_flag=True, help="Include the original JSON event (_payload).")
 @click.option("--count", is_flag=True, help="Print only the number of matching events.")
+@click.option("--payloads", is_flag=True,
+              help="Print each event's original JSON, one per line (for scripts; like `isodrome-dev read --json`).")
 @click.option("--at-position", help="Repeat an earlier query exactly: the position it printed.")
 @click.option("--system", is_flag=True, help="In a table, also show _partition, _offset, _message_id, _receive_time.")
 @_apply(dedupe_options)
 @format_option
 @pass_context
 def feed_query(
-    ctx: Context, name, namespace, since, start, end, as_of, as_of_lag, as_of_basis, filters, columns, limit, payload, count,
+    ctx: Context, name, namespace, since, start, end, as_of, as_of_lag, as_of_basis, filters, columns, limit, payload, count, payloads,
     at_position, system, dedupe, keep, dedupe_order, fmt,
 ) -> None:
     """Read a feed's events by event time, filters and as-of."""
@@ -596,6 +601,11 @@ def feed_query(
         request.at_position.CopyFrom(_value(parse_position, at_position, "--at-position"))
     if d := _dedupe(dedupe, keep, dedupe_order):
         request.dedupe.CopyFrom(d)
+    if payloads:
+        if count:
+            raise click.UsageError("--payloads and --count are exclusive")
+        request.include_payload = True
+        request.columns[:] = ["_payload"]
     if count:
         request.columns[:] = request.columns or ["_offset"]  # no data needed, just rows
     elif limit:
@@ -610,6 +620,11 @@ def feed_query(
         if table is None:
             continue
         rows += table.num_rows
+        if payloads:
+            for value in table.column("_payload").to_pylist():
+                if value is not None:
+                    click.echo(value)
+            continue
         if not count:
             if limit:
                 table = table.slice(0, max(limit - shown, 0))
@@ -619,6 +634,10 @@ def feed_query(
             printer.table(table)
     if count:
         click.echo(rows)
+        return
+    if payloads:
+        if rows:
+            _attribution(ctx, request.feed)
         return
     printer.finish("(no events)")
     if rows:

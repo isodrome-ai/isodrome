@@ -13,7 +13,7 @@ import pyarrow as pa
 
 from isodrome import errors
 from isodrome import push as pusher
-from isodrome.output import decode
+from isodrome._output import decode
 from isodrome.parse import format_ns, short_enum, to_ns
 from isodrome.query import TIME_COLUMNS, Query, conditions
 from isodrome.result import Result

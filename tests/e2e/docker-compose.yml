@@ -72,8 +72,31 @@ services:
       ISODROME_FLUSH_INTERVAL: 1s
       # `local` may publish namespaces; the tests read them from a second organization.
       ISODROME_PUBLIC_ORGANIZATIONS: local
-      # DEV ONLY: the publicly known admin key of the local stack.
+      # DEV ONLY: the publicly known admin key of the local stack, the worker's token, and the
+      # key sealing credentials.
       ISODROME_BOOTSTRAP_KEY: iso_devlocal_DEVONLYlocalAdminKeyNeverUseInProduction0
+      ISODROME_WORKER_TOKEN: devonly-local-worker-token-never-use-in-production
+      ISODROME_SECRETS_KEY: ZGV2b25seS1sb2NhbC1zZWNyZXRzLWtleS0zMmJ5dGU=
     ports:
       - "7470:7470"
       - "7471:7471"
+
+  # Runs connections and transformers. Transformer code and package builds run in gVisor
+  # sandboxes started by the worker, which needs root and a privileged container for that.
+  connectors:
+    image: ${ISODROME_SERVER_IMAGE:-ghcr.io/isodrome-ai/isodrome-server:latest}
+    entrypoint: ["/usr/local/bin/isodrome-connector-worker"]
+    user: "0:0"
+    privileged: true
+    depends_on:
+      isodrome-server:
+        condition: service_healthy
+    environment:
+      ISODROME_SERVER_URL: http://isodrome-server:7470
+      ISODROME_WORKER_TOKEN: devonly-local-worker-token-never-use-in-production
+      ISODROME_WORKER_CACHE: /var/lib/isodrome-worker
+    healthcheck:
+      test: ["CMD-SHELL", "find /tmp/isodrome-worker-healthy -mmin -1 | grep -q ."]
+      interval: 10s
+      timeout: 5s
+      retries: 30

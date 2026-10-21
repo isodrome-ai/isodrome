@@ -45,10 +45,38 @@ forecast.query(as_of_lag="24h", basis="published", dedupe=["_key", "_event_time"
 iso.as_of_join(trades, obs, at="time", key="station")                 # each row with what was known then
 ```
 
+`iso.read(ref, ...)`, `iso.latest(ref, ...)` and `iso.subscribe(ref, ...)` do the same in one call,
+with the CLI's options (`start`, `end`, `as_of`, `as_of_basis`, `where`, `columns`, `dedupe`, `keep`,
+`dedupe_order`, `limit`). Feed references may name a version or tag: `prices@2`, `prices:prod`.
+
 Results are pandas DataFrames (`.to_df()`; also `.to_arrow()`, `.to_polars()`), carry the
 position they were read at (`query.at(result.position)` repeats a read exactly) and the data's
 attribution. [`examples/forecast_verification.ipynb`](examples/forecast_verification.ipynb)
-scores four weather models against observations, without look-ahead; `docs/SDK.md` is the design.
+scores four weather models against observations, without look-ahead;
+[`examples/nfl.ipynb`](examples/nfl.ipynb) deploys the NFL example's models into your namespace and
+reads their ratings, spreads and season forecasts as of any moment. `docs/SDK.md` is the design.
+
+## Transformers
+
+```python
+import isodrome as iso
+
+@iso.transformer(
+    name="nfl-elo",
+    triggers={"results": "isodrome/public/nfl_results"},
+    output=iso.output("nfl_elo", key="team", time="rated_at"),
+    as_of="published",
+    state=True,                          # ctx.state: rebuilt only by replaying every trigger event
+)
+def elo(event, ctx):
+    ratings = ctx.state.setdefault("ratings", {})
+    ...
+```
+
+`iso transformer test` builds and verifies a project (load, static checks, a replay of recent
+events, and the fixtures in `isodrome_tests/`); `iso transformer deploy` then waits through the
+build and the backfill until it is live. [docs/TRANSFORMERS.md](docs/TRANSFORMERS.md) covers state,
+the as-of basis, fixtures and backtests.
 
 ## Commands
 
@@ -63,6 +91,7 @@ scores four weather models against observations, without look-ahead; `docs/SDK.m
 | `iso key create` / `list` / `revoke` | API keys (personal by default, or for a service account); your sessions |
 | `iso service-account create` / `list` / `delete` | identities for software (CI, services), with keys of their own |
 | `iso connector templates`, `iso connection create` / `list` / `show` / `credentials` / `pause` / `resume` / `delete` | Isodrome-run downloaders that fill feeds from outside sources |
+| `iso transformer test` / `deploy` / `list` / `show` / `run` / `builds` / `pause` / `resume` / `delete` | Python that Isodrome runs on feeds' events to write a feed; see [docs/TRANSFORMERS.md](docs/TRANSFORMERS.md) |
 
 `iso <command> --help` describes each one.
 

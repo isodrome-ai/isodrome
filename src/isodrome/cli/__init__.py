@@ -17,6 +17,7 @@ from isodrome.cli.connector import connection, connector
 from isodrome.cli.context import Context, Group, warn_on_version_mismatch
 from isodrome.cli.feed import feed
 from isodrome.cli.tenancy import key, namespace, service_account
+from isodrome.cli.transformer import transformer
 from isodrome._transport import API_VERSION, Transport
 from isodrome.config import Config
 
@@ -67,6 +68,7 @@ cli.add_command(key)
 cli.add_command(service_account)
 cli.add_command(connector)
 cli.add_command(connection)
+cli.add_command(transformer)
 
 
 def main() -> None:

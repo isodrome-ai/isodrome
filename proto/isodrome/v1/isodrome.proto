@@ -19,8 +19,9 @@ service Isodrome {
   rpc WhoAmI(WhoAmIRequest) returns (WhoAmIResponse);
   rpc CreateNamespace(CreateNamespaceRequest) returns (Namespace);
   rpc ListNamespaces(ListNamespacesRequest) returns (ListNamespacesResponse);
-  // Make a namespace public (readable from every organization) or private. ADMIN only, and
-  // only for organizations the server allows to publish (ISODROME_PUBLIC_ORGANIZATIONS).
+  // Make a namespace public (readable from every organization) or private, and/or rename it.
+  // ADMIN only; publishing only for organizations the server allows to publish
+  // (ISODROME_PUBLIC_ORGANIZATIONS). See UpdateNamespaceRequest.new_name for renaming.
   rpc UpdateNamespace(UpdateNamespaceRequest) returns (Namespace);
   // Only an empty namespace (no feeds) that no active key uses as its default.
   rpc DeleteNamespace(DeleteNamespaceRequest) returns (DeleteNamespaceResponse);  // ADMIN only
@@ -33,6 +34,25 @@ service Isodrome {
   // Revokes all its credentials at once.
   rpc DeleteServiceAccount(DeleteServiceAccountRequest) returns (DeleteServiceAccountResponse);
 
+  // Organizations: each has one owner (ROLE_OWNER, the person who created it), a plan and a
+  // protected `prod` namespace. Switching a browser session to another organization is
+  // `POST /auth/web/switch`, not an RPC (the token goes into a cookie).
+  //
+  // The organizations the caller belongs to. Only a credential acting for a person (a session
+  // or a personal key), not a service account's or an organization key.
+  rpc ListMyOrganizations(ListMyOrganizationsRequest) returns (ListMyOrganizationsResponse);
+  // The caller's organization: owner, plan (with limits) and member count. Any role.
+  rpc GetOrganization(GetOrganizationRequest) returns (Organization);
+  // The people in the caller's organization. Any role; read-only.
+  rpc ListMembers(ListMembersRequest) returns (ListMembersResponse);
+  // A new organization owned by the caller, on a plan, with a protected `prod` and the caller's
+  // own namespace. A person's credential only. FAILED_PRECONDITION if the plan is unavailable,
+  // or the caller already owns as many organizations on it as it allows a person ("one free
+  // organization per person").
+  rpc CreateOrganization(CreateOrganizationRequest) returns (Organization);
+  // Every plan, with its limits and whether a new organization can be created on it.
+  rpc ListPlans(ListPlansRequest) returns (ListPlansResponse);
+
   // Feeds
   rpc CreateFeed(CreateFeedRequest) returns (Feed);
   rpc GetFeed(GetFeedRequest) returns (Feed);
@@ -42,23 +62,85 @@ service Isodrome {
   // purged after the grace period (Feed.purge_at_ns) unless UndeleteFeed restores it first.
   rpc DeleteFeed(DeleteFeedRequest) returns (Feed);                        // WRITER or ADMIN
   rpc UndeleteFeed(UndeleteFeedRequest) returns (Feed);                    // WRITER or ADMIN
+  // Moves a feed to another namespace and/or renames it, with every version, its data, ids,
+  // stats and tags. Nothing is copied, and ids don't change, so transformers pinned to it keep
+  // reading or writing it (they restart with the new name). Within the organization only.
+  // ALREADY_EXISTS if the target name is taken in the target namespace (by a live feed, or a
+  // deleted one that can still be undeleted); FAILED_PRECONDITION for a feed a connection writes
+  // (move the connection instead: UpdateConnection moves its feeds with it). WRITER or ADMIN;
+  // out of, within or into a protected namespace (prod): ADMIN.
+  rpc MoveFeed(MoveFeedRequest) returns (MoveFeedResponse);
+  // Declares a feed's definition (key, time fields, …), idempotently: creates version 1 if the
+  // feed does not exist; returns the latest version if it matches; otherwise, with
+  // allow_new_version, creates the next version (FAILED_PRECONDITION without it). Description,
+  // licence, attribution and source URL are updated in place, never versioned.
+  rpc DeclareFeed(DeclareFeedRequest) returns (DeclareFeedResponse);       // WRITER or ADMIN
+  // Points a tag at a version (FeedRef with version or tag), moving it if it pointed elsewhere.
+  rpc SetFeedTag(SetFeedTagRequest) returns (Feed);                        // WRITER or ADMIN
+  rpc DeleteFeedTag(DeleteFeedTagRequest) returns (DeleteFeedTagResponse); // WRITER or ADMIN
   rpc ListRejections(ListRejectionsRequest) returns (ListRejectionsResponse);
 
   // Connectors: Isodrome-run downloaders that fill feeds from outside sources. A template is a
   // kind of connector (e.g. "met_eireann.point_forecast"); a connection is one running instance
   // of a template in a namespace, with its options. Creating a connection creates its feeds and
   // a service account it writes as; workers then run it. Viewing: READER; changing: ADMIN.
+  //
+  // The template library describes itself (ConnectorTemplate: catalogue fields, an options
+  // schema, credentials), so a client renders what the server sends and a new template, option
+  // or rule needs no client change.
+  //
+  // Field errors: CreateConnection, UpdateConnection and SetConnectionCredentials refuse a bad
+  // request with INVALID_ARGUMENT carrying a `google.rpc.BadRequest` error detail (in
+  // `grpc-status-details-bin`, as gRPC's richer error model; google/rpc/error_details.proto)
+  // with one `FieldViolation {field, description}` per problem, every one found (not just the
+  // first). `field` is a path: `name`, `template`, `namespace`, `feed_prefix`, `options` (the
+  // whole), `options.<property>`, `options.<list>[<i>].<property>` (e.g.
+  // `options.locations[2].lat`), `credentials` (the whole) or `credentials.<name>`; for
+  // UpdateConnection also `new_name` and `reset_cursor`. The status message says the same in
+  // one line, for people.
   rpc ListConnectorTemplates(ListConnectorTemplatesRequest) returns (ListConnectorTemplatesResponse);
+  // Creates the connection's feeds (adopting existing ones of the same names), its service
+  // account and the connection, or, if any step fails, none of them: what it made is undone.
   rpc CreateConnection(CreateConnectionRequest) returns (Connection);
   rpc ListConnections(ListConnectionsRequest) returns (ListConnectionsResponse);
   rpc GetConnection(GetConnectionRequest) returns (Connection);
   rpc PauseConnection(PauseConnectionRequest) returns (Connection);
   rpc ResumeConnection(ResumeConnectionRequest) returns (Connection);
   // Replaces a connection's credentials (for templates that need the owner's own account with
-  // the source). Write-only: credentials are never returned. The connection restarts with them.
+  // the source). Write-only: credentials are never returned. The connection restarts with them,
+  // pinned to the current versions of the secrets they name.
   rpc SetConnectionCredentials(SetConnectionCredentialsRequest) returns (Connection);
+  // Re-pins a connection to the current version of each secret it names and restarts it on a
+  // worker. A paused connection is re-pinned and stays paused.
+  rpc RestartConnection(RestartConnectionRequest) returns (Connection);
+  // The organization's secrets (connectors' API keys), ADMIN: write-only values (never
+  // returned), kept in the server's secret store (GCP Secret Manager, or sealed). A connection's
+  // credentials name them: `{"api_key": "secret:odds-api"}`, or `"secret:betfair"` for a whole
+  // JSON object; they are read only when a worker leases the connection. Secrets are versioned:
+  // SetSecret adds the next version, and a connection keeps the versions it was pinned to
+  // (nothing restarts) until RestartConnection or new credentials.
+  rpc SetSecret(SetSecretRequest) returns (Secret);
+  // Isodrome's events catalogue: a stable id for each real-world event (a game), whichever
+  // source names it: `<league>:<date>:<away>@<home>` (e.g. `nfl:2026-10-18:CAR@PHI`, the date in
+  // the league's time zone, canonical team codes). A source's own id is remembered; otherwise
+  // the teams (by any of their names) and the start time (within 36 hours) match an existing
+  // event, or a new one is made. Any signed-in caller; at most 1,000 events a call.
+  rpc ResolveEvents(ResolveEventsRequest) returns (ResolveEventsResponse);
+  rpc ListSecrets(ListSecretsRequest) returns (ListSecretsResponse);
+  rpc DeleteSecret(DeleteSecretRequest) returns (DeleteSecretResponse);
   // Stops it and deletes its service account. Its feeds and their data stay.
   rpc DeleteConnection(DeleteConnectionRequest) returns (DeleteConnectionResponse);
+  // Renames a connection and/or moves it to another namespace, with its feeds, or renames its
+  // feeds with a new feed_prefix. Each feed moves as MoveFeed moves one (every version, its data,
+  // ids and tags; transformers reading it carry on), and the connection keeps its cursor
+  // (history already fetched is never fetched again), options, credentials, secret pins and
+  // status. Its service account becomes `connection-<new name>`, its keys default to the new
+  // namespace, and its worker restarts it with the new names. ADMIN; out of, within or into a
+  // protected namespace (prod), with manage_protected (admins have it).
+  // Also replaces its options (options_json), checked as CreateConnection checks them; it
+  // restarts with them, keeping its cursor where the template says the change allows (see
+  // `x-resets-cursor` in ConnectorTemplate.options_schema).
+  rpc UpdateConnection(UpdateConnectionRequest) returns (Connection);
 
   // Data
   rpc Send(stream SendRequest) returns (stream SendResponse);
@@ -67,6 +149,75 @@ service Isodrome {
   rpc Subscribe(SubscribeRequest) returns (stream SubscribeResponse);
   // Point-in-time values for (key, time) probes: an as-of join against the client's rows.
   rpc Lookup(LookupRequest) returns (stream LookupResponse);
+  // A synchronisation point for a subscriber: every event acknowledged before `server_ns` is
+  // below `next_offsets` and decided. A subscriber has all of them once, in each partition, it
+  // has received the event at `last_accepted` (or subscribed past it). Transformers use it to
+  // know a dependency is complete up to a trigger's receive time.
+  rpc SyncFeed(SyncFeedRequest) returns (SyncFeedResponse);
+
+  // Transformers: code that reads feeds and writes a feed, run by Isodrome. A transformer
+  // declares its triggers (feeds whose events invoke it) and dependencies (feeds it reads as of
+  // each trigger), each pinned to a version at deploy, and its output feed. Deploying again makes
+  // a new version, which writes a new output version and runs from then on. Runs execute a
+  // transformer over a time range (backtests, backfills) into a named feed.
+  // Viewing: READER; deploying, renaming, pausing, resuming, deleting and runs: ADMIN.
+  //
+  // A deploy is asynchronous: it returns a build. Isodrome installs the project's packages,
+  // extracts the transformers its code declares (the manifest), resolves and pins the inputs,
+  // then verifies the result on recent data; only a verified build becomes the new version.
+  rpc DeployTransformer(DeployTransformerRequest) returns (TransformerBuild);
+  // A project (a zip of the directory), uploaded in chunks before deploying it.
+  rpc UploadBundle(stream UploadBundleRequest) returns (UploadBundleResponse);
+  // A stateful transformer's backfill computed elsewhere (`run-local --package`): its outputs,
+  // read positions and state checkpoints. A deploy naming it (`backfill_sha256`) verifies it by
+  // replaying sampled segments instead of the whole history, and starts from it.
+  rpc UploadBackfill(stream UploadBundleRequest) returns (UploadBundleResponse);
+  rpc GetTransformerBuild(GetTransformerBuildRequest) returns (TransformerBuild);   // with log and report
+  rpc ListTransformerBuilds(ListTransformerBuildsRequest) returns (ListTransformerBuildsResponse);
+  rpc CancelTransformerBuild(CancelTransformerBuildRequest) returns (TransformerBuild);
+  // Private package indexes builds install from (ADMIN). Credentials are write-only.
+  rpc CreatePackageIndex(CreatePackageIndexRequest) returns (PackageIndex);
+  rpc ListPackageIndexes(ListPackageIndexesRequest) returns (ListPackageIndexesResponse);
+  rpc SetPackageIndexCredentials(SetPackageIndexCredentialsRequest) returns (PackageIndex);
+  rpc DeletePackageIndex(DeletePackageIndexRequest) returns (DeletePackageIndexResponse);
+  rpc ListTransformers(ListTransformersRequest) returns (ListTransformersResponse);
+  rpc GetTransformer(GetTransformerRequest) returns (Transformer);
+  rpc PauseTransformer(PauseTransformerRequest) returns (Transformer);
+  rpc ResumeTransformer(ResumeTransformerRequest) returns (Transformer);
+  rpc DeleteTransformer(DeleteTransformerRequest) returns (DeleteTransformerResponse);   // its feeds stay
+  // Renames a transformer. It keeps its id, versions, cursor (and state), runs, builds, output
+  // feed and history; its service account becomes `transformer-<new name>`, and it restarts on a
+  // worker with the new name, resuming where it was. Rename only: a transformer stays in its
+  // namespace (its output feed is there, and bare inputs resolve there); its feeds are renamed
+  // or moved separately (MoveFeed). Deploys find a transformer by name, so deploying under the
+  // new name makes its next version (a project's `@iso.transformer` must declare the new name),
+  // while a deploy under the old name makes a new transformer. ADMIN (deploy_transformers),
+  // and manage_protected in a protected namespace (prod). Refused: a name another of the
+  // organization's transformers has (ALREADY_EXISTS: names are unique per organization), an
+  // unfinished deploy under the old or new name, or a service account left with the new
+  // account name (FAILED_PRECONDITION). Capability `transformers.rename`.
+  rpc UpdateTransformer(UpdateTransformerRequest) returns (Transformer);
+  rpc StartTransformerRun(StartTransformerRunRequest) returns (TransformerRun);
+  rpc ListTransformerRuns(ListTransformerRunsRequest) returns (ListTransformerRunsResponse);
+  rpc GetTransformerRun(GetTransformerRunRequest) returns (TransformerRun);
+  rpc CancelTransformerRun(CancelTransformerRunRequest) returns (TransformerRun);
+
+  // The pipeline as a graph: connections, feeds and transformers with the edges between them,
+  // each node with its health (decided here, so every client agrees) and figures. READER;
+  // connections and transformers appear to those who may see them.
+  rpc GetPipeline(GetPipelineRequest) returns (Pipeline);
+  // The pipeline, live (READER, as GetPipeline): a snapshot, then only the nodes that change
+  // (each at most once a second, newest state), events, and a heartbeat after 15 s of silence.
+  // A new snapshot follows any change in the graph's shape. Ends with UNAUTHENTICATED when the
+  // credential expires or stops working; reopen for a fresh snapshot after any end. At most
+  // ISODROME_WATCH_MAX_PER_CREDENTIAL streams per credential (a new one ends the oldest) and
+  // ISODROME_WATCH_MAX_PER_ORGANIZATION per organization (RESOURCE_EXHAUSTED beyond).
+  rpc WatchPipeline(WatchPipelineRequest) returns (stream PipelineUpdate);
+
+  // Usage, for billing and audit (ADMIN): what the organization ingested, stored and read, per
+  // minute, hour or day, optionally per feed. Counters are summed; levels (stored bytes and
+  // events, feed count) are averaged over the period.
+  rpc GetUsage(GetUsageRequest) returns (GetUsageResponse);
 }
 
 // ---------- Server ----------
@@ -81,7 +232,8 @@ message ServerInfo {
   int64 dedupe_window_ns = 6;        // how long a message_id is remembered for retries
   // Features this server has beyond the base v1 API, so a client can use them where they
   // exist and fall back otherwise: "read.as_of_lag", "read.estimate", "lookup",
-  // "feeds.freshness", "connections", "connections.credentials".
+  // "feeds.freshness", "feeds.versions", "namespaces.personal", "connections",
+  // "connections.credentials".
   repeated string capabilities = 7;
 }
 
@@ -92,6 +244,9 @@ enum Role {
   ROLE_ADMIN = 1;
   ROLE_WRITER = 2;
   ROLE_READER = 3;
+  // Above admin: the person who owns the organization (one per organization). Only a person's
+  // session acts as owner; API keys and service accounts are never given this role.
+  ROLE_OWNER = 4;
 }
 
 // A credential is an API key (long-lived) or a session (from `iso login`, expiring). One owned
@@ -113,6 +268,9 @@ message WhoAmIResponse {
   CredentialKind kind = 6;
   int64 expires_at_ns = 7;           // 0: does not expire
   string service_account = 8;        // the service account it acts for, if one
+  // What this credential may do now, by stable action name (e.g. "create_namespace",
+  // "manage_secrets"), so a UI can hide what it can't do. The server still checks every call.
+  repeated string allowed_actions = 9;
 }
 
 message Namespace {
@@ -121,6 +279,11 @@ message Namespace {
   string name = 3;
   int64 created_at_ns = 4;
   bool public = 5;                   // readable by every signed-in principal, in any organization
+  // A person's own namespace (their default; readable by the organization, written only by
+  // them and admins; never deleted): who owns it. Empty: a shared namespace.
+  string owner = 6;
+  // Never deleted: the organization's production namespace, `prod` (shown first).
+  bool protected = 7;
 }
 message CreateNamespaceRequest {     // ADMIN only
   string name = 1;
@@ -129,6 +292,16 @@ message CreateNamespaceRequest {     // ADMIN only
 message UpdateNamespaceRequest {
   string name = 1;
   optional bool public = 2;
+  // Renames it (empty: unchanged; validated as CreateNamespace's name). It keeps its id, so its
+  // feeds (every version, deleted ones too), their data, tags, connections, transformers and the
+  // keys defaulting to it all stay; they are known by the new name only, and the old name is
+  // free for a new namespace. Transformers reading its feeds (in any organization, for a public
+  // namespace) and its connections restart with the new name and resume where they were.
+  // Refused: a person's own namespace (FAILED_PRECONDITION: its name comes from the person), a
+  // protected one (`prod`, FAILED_PRECONDITION), an unfinished deploy into it
+  // (FAILED_PRECONDITION), a name in use (ALREADY_EXISTS). Clients and
+  // code that name the old namespace must be changed. Capability `namespaces.rename`.
+  string new_name = 3;
 }
 // Your organization's namespaces, or (public = true) every organization's public ones.
 message ListNamespacesRequest { bool public = 1; }
@@ -185,6 +358,57 @@ message ListApiKeysRequest {}
 message ListApiKeysResponse { repeated ApiKey keys = 1; }
 message RevokeApiKeyRequest { string key_id = 1; }          // takes effect immediately; idempotent
 
+// ---------- Organizations ----------
+
+// Monthly allowances. Shown, not yet enforced.
+message PlanLimits {
+  int64 partition_months = 1;
+  int64 events = 2;
+  int64 stored_gb_months = 3;
+  int64 read_gb = 4;
+  int64 transformers = 5;
+  int64 transformer_vcpu_hours = 6;
+}
+message Plan {
+  string id = 1;                     // stored on the organization, e.g. "free"
+  string name = 2;
+  PlanLimits limits = 3;
+  bool available = 4;                // can new organizations be created on it today
+  optional uint32 max_owned_per_person = 5;  // unset: no cap
+}
+message Organization {
+  string id = 1;
+  string name = 2;
+  string owner = 3;                  // the owner's email; empty while no person owns it
+  Plan plan = 4;
+  int64 member_count = 5;            // people (not service accounts)
+  int64 created_at_ns = 6;
+}
+// One of the caller's organizations.
+message OrganizationMembership {
+  string id = 1;
+  string name = 2;
+  Role role = 3;                     // the caller's role there
+  Plan plan = 4;
+  bool current = 5;                  // the organization of the credential in use
+}
+message ListMyOrganizationsRequest {}
+message ListMyOrganizationsResponse { repeated OrganizationMembership organizations = 1; }
+message GetOrganizationRequest {}
+message Member {
+  string email = 1;
+  Role role = 2;
+  int64 joined_at_ns = 3;
+}
+message ListMembersRequest {}
+message ListMembersResponse { repeated Member members = 1; }   // owner first
+message CreateOrganizationRequest {
+  string name = 1;                   // ^[a-z][a-z0-9_-]{0,62}$, unique on the server
+  string plan = 2;                   // a plan id; empty: "free"
+}
+message ListPlansRequest {}
+message ListPlansResponse { repeated Plan plans = 1; }
+
 // ---------- Feeds ----------
 
 // Empty namespace = the API key's default namespace.
@@ -194,6 +418,11 @@ message FeedRef {
   // Another organization, whose namespace must be public; such feeds can only be read. Empty:
   // the credential's own organization.
   string organization = 3;
+  // Which version: a number, or a tag (`prod`, `v0`, …; `latest` is always the newest). Neither:
+  // writes (Send, UpdateFeed) go to the latest version; reads to the one tagged `prod`, else the
+  // latest. DeleteFeed with neither deletes every version.
+  int32 version = 4;                 // 0: not given
+  string tag = 5;
 }
 
 enum TimeUnit {
@@ -237,6 +466,11 @@ message FeedStats {
   int64 last_event_time_ns = 7;
   int64 last_receive_time_ns = 8;
   int64 last_published_time_ns = 9;
+  // Usage of this feed version, all time (see GetUsage), as of the last minute written.
+  int64 events_ingested_total = 10;
+  int64 bytes_ingested_total = 11;
+  int64 bytes_read_total = 12;          // by every organization reading it
+  int64 bytes_stored = 13;              // in its files now
 }
 
 // Events refused at Send (each is also answered in its SendResponse and kept in the feed's
@@ -324,12 +558,43 @@ message Feed {
   string attribution = 19;
   string source_url = 20;
   bool public = 21;                 // in a public namespace
+  int32 version = 22;               // this version's number (from 1)
+  repeated string tags = 23;        // the tags pointing at this version
+  int32 latest_version = 24;        // the feed's newest version
 }
 
 message DeleteFeedRequest { FeedRef feed = 1; }
+message DeclareFeedRequest {
+  CreateFeedRequest definition = 1;  // as for CreateFeed
+  bool allow_new_version = 2;
+}
+message DeclareFeedResponse {
+  Feed feed = 1;
+  // "created" (version 1), "unchanged" (the latest matched), "new_version", or "updated"
+  // (only description, licence, attribution or source URL changed).
+  string outcome = 2;
+}
+message SetFeedTagRequest {
+  FeedRef feed = 1;                  // with the version (or a tag) to point at
+  string tag = 2;                    // ^[a-z0-9][a-z0-9._-]{0,62}$, not `latest`
+}
+message DeleteFeedTagRequest {
+  FeedRef feed = 1;                  // namespace and name
+  string tag = 2;
+}
+message DeleteFeedTagResponse {}
 message UndeleteFeedRequest {
   FeedRef feed = 1;                 // namespace and name of the deleted feed
   string id = 2;                    // needed only if several deleted feeds had that name
+}
+
+message MoveFeedRequest {
+  FeedRef feed = 1;                 // namespace and name (no version or tag: every version moves)
+  string namespace = 2;             // where to move it; empty: unchanged
+  string name = 3;                  // its new name; empty: unchanged
+}
+message MoveFeedResponse {
+  repeated Feed feeds = 1;          // its live versions, oldest first, as now named
 }
 
 message GetFeedRequest { FeedRef feed = 1; }
@@ -339,6 +604,8 @@ message ListFeedsRequest {
   string namespace = 1;             // empty = key's default namespace
   bool deleted = 2;                 // list deleted feeds that can still be undeleted instead
   string organization = 3;          // another organization's public namespace (see FeedRef)
+  // Every version of every feed, instead of one per feed (the one reads resolve to).
+  bool all_versions = 4;
 }
 message ListFeedsResponse { repeated Feed feeds = 1; }
 
@@ -349,6 +616,9 @@ message Event {
   optional int64 event_time_ns = 2;  // if set, overrides time_field
   string message_id = 3;             // required; client-generated; unique per feed; makes retries idempotent
   optional int64 published_time_ns = 4;  // if set, overrides publication_time_field
+  // How it got here, stored as `_trace`: a JSON object (at most 4 KB) of the stages it passed
+  // and when, set by transformers and connectors. Never part of the payload or message id.
+  optional string trace = 5;
 }
 
 message SendRequest {
@@ -532,6 +802,9 @@ message SubscribeRequest {
     int64 from_event_time_ns = 3;
     bool from_now = 4;
     uint64 from_last = 11;           // the last N events (by event time), then live: "tail"
+    // From a recorded position (rows carry _partition and _offset; resume at last + 1 for each
+    // partition), then live: a consumer resuming exactly where it stopped.
+    Position from_position = 12;
   }
   optional double speed = 5;         // history pacing by event time (1.0 = real time); unset = as fast as possible
   repeated Filter filters = 6;
@@ -558,8 +831,11 @@ message SubscribeResponse {
 
 // ---------- Connectors ----------
 
+// A template. Templates are the same for every organization: none is offered to some only.
 message ConnectorTemplate {
   string name = 1;                   // e.g. "met_eireann.point_forecast"
+  // Bumped when what the template writes or how it reads its options changes (see
+  // Connection.template_version).
   uint32 version = 2;
   string description = 3;
   string options_example = 4;        // JSON
@@ -567,10 +843,60 @@ message ConnectorTemplate {
   int64 poll_interval_ms = 6;
   // Credentials a connection must be given (e.g. an exchange API key); empty for open data.
   repeated ConnectorCredential credentials = 7;
+  // A JSON Schema of the options, for forms, in this subset (and nothing else):
+  // - the top level is an object of properties; each a `string`, `integer`, `number`,
+  //   `boolean`, or an `array` of those or of objects of them (no deeper nesting);
+  // - any property: `title` (its label), `description`, `default`, `examples`, `enum`,
+  //   `x-group` (the form's section, e.g. "What to follow", "Where", "Polling", "History");
+  //   `x-hidden: true`: accepted but never offered (test-only source URLs: skip it);
+  //   `x-resets-cursor: true` (top level only): changing it on an existing connection starts
+  //   it over from an empty cursor, fetching everything again (history included: a metered
+  //   source spends credits again), so UpdateConnection refuses it unless reset_cursor;
+  // - strings: `format: "date"` (YYYY-MM-DD) with `formatMinimum` / `formatMaximum` (dates,
+  //   inclusive); `pattern` (anchored `^…$`, read alike by JavaScript's and Rust's regexes);
+  //   `minLength` / `maxLength`;
+  // - numbers: `minimum` / `maximum` (inclusive);
+  // - arrays: `minItems` / `maxItems`; `uniqueItems` (lists of scalars); `x-unique-by: "id"`
+  //   (lists of objects: that property's values are unique within the list);
+  // - objects: `required`; `dependentRequired` (`{"history_from": ["history_budget"]}`: given
+  //   the first, the listed ones are required too); `anyOf` holding only `{"required": [...]}`
+  //   alternatives, at least one of which holds (`[{"required": ["regions"]}, {"required":
+  //   ["bookmakers"]}]`: regions, bookmakers or both).
+  // Objects are closed: a key that is not a property is refused. A property set to null counts
+  // as left out. Properties are in the order to show them. Rules the schema can't say
+  // (comparisons between fields, e.g. history_to after history_from) come back as field errors
+  // from CreateConnection; its validate_only checks a form's options without creating anything.
+  string options_schema = 8;
+  // For the catalogue.
+  string title = 9;                  // display name, e.g. "The Odds API · odds"
+  string provider = 10;              // who provides the data, e.g. "Met Éireann", "nflverse"
+  string category = 11;              // "Weather", "Sports", "Markets" or "Geography" (more may come)
+  repeated string tags = 12;         // e.g. "Sports", "NFL", "American football"; the category among them
+  string docs_url = 13;              // the source's documentation
+  // What running it costs, for a source metered on the owner's own key (The Odds API's
+  // credits); empty: free to run.
+  string cost_note = 14;
+  bool deprecated = 15;              // don't create new ones (existing connections still run)
+  string deprecated_reason = 16;
 }
+// One credential. `credentials_json` is either:
+// - a JSON object with a string per credential name: the value itself, or "secret:<name>"
+//   naming one of the organization's secrets (SetSecret) holding that one value as a string
+//   (not a JSON object); e.g. `{"api_key": "secret:odds-api"}`, `{"api_key_id": "k1",
+//   "private_key": "secret:kalshi-pem"}`; or
+// - one string, "secret:<name>", naming a secret whose value is a JSON object with every
+//   credential, e.g. `"secret:kalshi"` holding `{"api_key_id": …, "private_key": …}`.
+// Every required credential is given, non-empty; no others.
 message ConnectorCredential {
   string name = 1;                   // the key in credentials_json
   string description = 2;
+  string title = 3;                  // a form's label, e.g. "API key"
+  bool required = 4;                 // every credential declared so far is
+  bool multiline = 5;                // several lines (a PEM private key): a text area
+  // Best kept in the organization's secrets and named ("secret:<name>"): a form offers that
+  // first.
+  bool secret_recommended = 6;
+  string docs_url = 7;               // where the source explains how to get it
 }
 message ConnectorFeed {
   string name = 1;
@@ -593,7 +919,8 @@ message Connection {
   string options_json = 5;           // as validated, with the template's defaults filled in
   string service_account = 6;        // the identity it writes as
   bool paused = 7;
-  // "pending" (waiting for a worker), "running", "failing" (see status_detail) or "paused".
+  // "pending" (waiting for a worker: also when its worker's lease has lapsed), "running",
+  // "failing" (see status_detail) or "paused".
   string status = 8;
   string status_detail = 9;
   string cursor_json = 10;           // where in the source it has got to (template-specific)
@@ -605,6 +932,33 @@ message Connection {
   repeated string feeds = 16;
   repeated string credential_fields = 17;  // the credentials given (names only, never values)
   int64 credentials_set_at_ns = 18;  // 0: none
+  repeated SecretVersion secrets = 19;     // the secret versions it is pinned to
+  int64 last_poll_duration_ms = 20;  // how long its last poll took; 0: none reported
+  int32 consecutive_failures = 21;   // polls in a row that failed (0 once one succeeds)
+  int64 last_failure_at_ns = 22;     // when a poll last failed; 0: never
+  string feed_prefix = 23;           // what its feeds were named with; empty: the template's names
+  // The template's name for each of its feeds → the feed this connection writes for it (in its
+  // namespace; `feeds` lists the same names).
+  map<string, string> feed_names = 24;
+  // When a poll last succeeded (the source was asked; it may have had nothing new), and when its
+  // worker means to poll next (by the connection's own options where the template has them,
+  // e.g. oddsapi.odds' every_minutes / idle_minutes; while a poll runs, when it was due). Health
+  // is judged by these, not by events: a source with nothing new sends none. 0: not yet.
+  int64 last_poll_at_ns = 25;
+  int64 next_poll_at_ns = 26;
+  // The template version its options were checked against: when it was created, or its options
+  // last changed (connections created before this was recorded: the version then current).
+  // Workers run the server's current template; ConnectorTemplate.version newer than this means
+  // the template changed since.
+  uint32 template_version = 27;
+  // Only in CreateConnection's response: the feeds that existed already and were (validate_only:
+  // would be) adopted rather than created.
+  repeated string adopted_feeds = 28;
+}
+message SecretVersion {
+  string name = 1;
+  int32 version = 2;                 // the version the connection uses
+  int32 current = 3;                 // the secret's current version (newer: restart to use it)
 }
 message CreateConnectionRequest {
   string name = 1;                   // ^[a-z][a-z0-9_-]{0,62}$, unique in the organization
@@ -612,20 +966,98 @@ message CreateConnectionRequest {
   string namespace = 3;              // empty: the credential's default namespace
   string options_json = 4;           // empty: the template's defaults
   bool paused = 5;                   // create without starting it
-  // The template's credentials as a JSON object of strings (see ConnectorTemplate.credentials).
-  // Stored encrypted; never returned.
+  // The template's credentials: a JSON object of strings, values or "secret:<name>" each, or
+  // one "secret:<name>" string for a JSON-object secret with them all (see
+  // ConnectorCredential). Stored encrypted; never returned.
   string credentials_json = 6;
+  // Names the connection's feeds (empty: the template's own names, e.g. `oddsapi_odds`). A
+  // template with one feed names it the prefix itself (oddsapi.odds with `oddsapi_nfl_games`:
+  // `oddsapi_nfl_games`); with several, the prefix replaces the start their names share, up to
+  // an `_` (nflverse.games' `nfl_schedule`, `nfl_results`, … with `nfl_2025`: `nfl_2025_schedule`,
+  // `nfl_2025_results`, …), or comes before each name if they share none (`<prefix>_<name>`).
+  // Each name must be a valid feed name. A feed of that name that exists already is adopted.
+  string feed_prefix = 7;
+  // A dry run: every check CreateConnection makes (name, template, namespace and permissions,
+  // options, credentials and the secrets they name, feed_prefix and the feed names), creating
+  // nothing. Returns the Connection it would create, without an id: `options_json` as it would
+  // be stored (defaults filled in), `feeds` / `feed_names`, `adopted_feeds`, `template_version`.
+  // A problem is the same error a real create gives, with every field violation.
+  bool validate_only = 8;
 }
 message SetConnectionCredentialsRequest {
   string name = 1;
   string credentials_json = 2;
 }
+message RestartConnectionRequest { string name = 1; }
+message SetSecretRequest {
+  string name = 1;                          // ^[a-z][a-z0-9_-]{0,62}$
+  string value = 2;                         // a string, or a JSON object of strings
+}
+message Secret {
+  string name = 1;
+  repeated string fields = 2;               // a JSON object's field names (empty: a string)
+  string backend = 3;                       // "gcp" or "sealed"
+  int64 created_at_ns = 4;
+  int64 updated_at_ns = 5;
+  repeated string used_by = 6;              // connections naming it (see uses)
+  int32 version = 7;                        // the current version (from 1)
+  repeated SecretUse uses = 8;              // connections naming it, with the versions they use
+}
+message SecretUse {
+  string connection = 1;
+  int32 version = 2;                        // older than Secret.version: restart it to update
+  string status = 3;                        // the connection's status
+}
+message EventDetails {
+  string sport = 1;                         // e.g. "american_football"
+  string league = 2;                        // e.g. "nfl"
+  int64 start_time_ns = 3;                  // 0: by the source's id alone
+  string home = 4;                          // any name a source uses ("Philadelphia Eagles", "PHI")
+  string away = 5;
+  string source = 6;                        // e.g. "nflverse", "oddsapi"
+  string source_event_id = 7;
+}
+message ResolveEventsRequest {
+  repeated EventDetails events = 1;
+  bool lookup_only = 2;                     // never make new events
+}
+message ResolvedEvent {
+  string event_id = 1;                      // empty: unresolved (see error)
+  double confidence = 2;                    // 1: the source's id, or teams and start within 15 min
+  string method = 3;                        // "mapping", "matched", "created"
+  string error = 4;
+  string home = 5;                          // canonical codes
+  string away = 6;
+  int64 start_time_ns = 7;
+}
+message ResolveEventsResponse { repeated ResolvedEvent events = 1; }
+message ListSecretsRequest {}
+message ListSecretsResponse { repeated Secret secrets = 1; }
+message DeleteSecretRequest { string name = 1; }
+message DeleteSecretResponse {}
 message ListConnectionsRequest {}
 message ListConnectionsResponse { repeated Connection connections = 1; }
 message GetConnectionRequest { string name = 1; }
 message PauseConnectionRequest { string name = 1; }
 message ResumeConnectionRequest { string name = 1; }
 message DeleteConnectionRequest { string name = 1; }
+message UpdateConnectionRequest {
+  string name = 1;
+  string new_name = 2;               // empty: unchanged; validated as CreateConnection's name
+  string namespace = 3;              // move it (and its feeds) here; empty: unchanged
+  // Set: renames its feeds with this prefix (as CreateConnectionRequest.feed_prefix; "": the
+  // template's own names). Unset: its feeds keep their names.
+  optional string feed_prefix = 4;
+  // Set: replaces its options (the whole: e.g. Connection.options_json edited), checked as
+  // CreateConnection's; it restarts with them. The cursor carries on unless an option marked
+  // `x-resets-cursor` changes: then INVALID_ARGUMENT with a field violation saying why, unless
+  // reset_cursor. Unset: unchanged.
+  optional string options_json = 5;
+  bool validate_only = 6;            // a dry run: every check, nothing changed; returns the result
+  // With options_json: start over from an empty cursor, fetching everything again (history
+  // included: a metered source spends credits again). Never implied.
+  bool reset_cursor = 7;
+}
 message DeleteConnectionResponse {}
 
 // ---------- Lookup ----------
@@ -655,4 +1087,397 @@ message LookupProbe {
 message LookupResponse {
   ArrowBatch batch = 1;
   int64 server_ns = 2;                       // on the first message
+}
+
+// ---------- Usage ----------
+
+message GetUsageRequest {
+  int64 start_ns = 1;                       // inclusive; 0: 24 hours before end
+  int64 end_ns = 2;                         // exclusive; 0: now
+  UsageBucket bucket = 3;
+  bool by_feed = 4;                         // one row per feed (else organization totals)
+}
+enum UsageBucket {
+  USAGE_BUCKET_UNSPECIFIED = 0;             // treated as HOUR
+  USAGE_BUCKET_MINUTE = 1;
+  USAGE_BUCKET_HOUR = 2;
+  USAGE_BUCKET_DAY = 3;
+}
+// Metrics: events_ingested, bytes_ingested, events_rejected (counted where the feed's owner
+// sends), bytes_read, read_requests (counted for the organization that reads, also another's
+// public feed), bytes_stored, events_stored (per feed) and feeds (the organization's live feed
+// versions; not per feed). Partitions: partitions (sampled, averaged: each feed version's until
+// it is purged, deleted or not) and partition_seconds (partitions × seconds held, summed), with
+// partition_months beside it (partition_seconds / 730 hours). Transformer compute, per output
+// feed (verifications not deployed: organization-wide): transformer_cpu_seconds (the code's
+// process's CPU time) with transformer_vcpu_hours beside it (/ 3600), and transformer_seconds
+// (wall time its process ran).
+message UsageRow {
+  int64 start_ns = 1;                       // the start of the minute, hour or day (UTC)
+  FeedRef feed = 2;                         // by_feed: the feed and version; else empty
+  string feed_id = 3;
+  string metric = 4;
+  double value = 5;
+}
+message GetUsageResponse { repeated UsageRow rows = 1; }
+
+// ---------- Transformers ----------
+
+message TransformerRef {
+  string namespace = 1;                     // empty: the credential's default namespace
+  string name = 2;                          // ^[a-z][a-z0-9_-]{0,62}$
+}
+message TransformerInput {
+  string name = 1;                          // how the code refers to it
+  // "[organization/]namespace/feed[@version|:tag]"; a bare "feed" is in the transformer's
+  // namespace. Pinned to a concrete version at deploy, whether or not one is written.
+  string feed = 2;
+  FeedRef pinned = 3;                       // in responses: the version it is pinned to
+  // Triggers only: invoke the code with a window of events instead of one event.
+  TransformerWindow window = 4;
+  // Dependencies only: how much event time of it the transformer keeps in memory (default
+  // 24 h). `at` and `history` see versions within it of the trigger's event time.
+  int64 horizon_ns = 5;
+}
+// A window over a trigger's events, per key (unless all_keys). Sliding (default): every event
+// invokes the code with the window ending at it. Tumbling: non-overlapping windows, each
+// invoking the code once, when the next event shows it has closed. Its contents are saved with
+// the transformer's cursor, so a restart resumes with the same windows.
+message SyncFeedRequest { FeedRef feed = 1; }
+message SyncFeedResponse {
+  int64 server_ns = 1;
+  repeated int64 next_offsets = 2;
+  repeated int64 last_accepted = 3;         // per partition; -1: nothing since the server started
+}
+
+message TransformerWindow {
+  uint32 count = 1;                         // the last N events (count or duration, not both)
+  int64 duration_ns = 2;                    // the events within this much event time
+  bool tumbling = 3;
+  bool all_keys = 4;                        // one window across every key
+}
+message TransformerOutput {
+  string feed = 1;                          // a feed name in the transformer's namespace
+  string key_field = 2;                     // empty: unkeyed
+  string time_field = 3;                    // empty: "event_time"
+  string publication_time_field = 4;        // empty: none
+  string description = 5;
+  FeedRef pinned = 6;                       // in responses: the version it writes
+}
+message DeployTransformerRequest {
+  TransformerRef transformer = 1;
+  repeated TransformerInput triggers = 2;   // at least one
+  repeated TransformerInput dependencies = 3;
+  TransformerOutput output = 4;
+  // Python source defining `entrypoint(event, ctx)`, which returns or yields output rows
+  // (dicts). ctx.<dependency>.at(key) reads a dependency as of the trigger; ctx.get(feed, key)
+  // and ctx.read(feed, ...) read any feed now, without that guarantee.
+  string code = 5;
+  string entrypoint = 6;
+  bool paused = 7;                          // deploy without starting it
+  // After a restart or a worker failure: "resume" (default) exactly where it left off, with
+  // nothing skipped or repeated in effect; "latest": skip whatever arrived while it was down and
+  // continue from new events.
+  string on_restart = 8;
+  // What a trigger sees of its dependencies. RECEIVED (default): the versions Isodrome had
+  // received before the trigger itself, exactly; a run replays triggers in receive order and so
+  // reproduces what live computed. PUBLISHED: the versions published by the time the trigger
+  // itself was published (its publication time, or else its event time), for backfilled
+  // sources; a run goes in that order.
+  AsOfBasis as_of_basis = 9;
+  // A project uploaded with UploadBundle (instead of `code`). Its code declares transformers
+  // (the manifest); `transformer.name` picks one (optional if it declares exactly one), and the
+  // fields above, when set, override the declaration.
+  string bundle_sha256 = 10;
+  string python_version = 11;               // "3.12" (default) or "3.13"
+  // Build and verify, report, but do not deploy (`iso transformer test`).
+  bool validate_only = 12;
+  // Verification: the share of sample events allowed to raise (default 0), how many recent
+  // trigger events to replay (default 1,000), and skipping the replay altogether.
+  double max_error_rate = 13;
+  uint32 sample_events = 14;
+  bool allow_unverified = 15;
+  // The code keeps state in `ctx.state` (`@iso.transformer(state=True)`). State is only ever
+  // built by replaying the triggers: each new version first processes every trigger event from
+  // the beginning, in the as-of basis's order, then continues live; a run warms it up the same
+  // way. It is never carried from one version to the next or set from outside.
+  bool stateful = 16;
+  // A backfill uploaded with UploadBackfill (stateful transformers): verification replays
+  // sampled segments of it from its checkpoints and compares (numbers within one part in a
+  // million: another machine's floating point may differ in the last digits); if it matches,
+  // the transformer publishes its outputs and continues from its final state instead of
+  // replaying the whole history.
+  string backfill_sha256 = 17;
+}
+message UploadBundleRequest { bytes chunk = 1; }    // at most 50 MB in all
+message UploadBundleResponse {
+  string sha256 = 1;
+  int64 size_bytes = 2;
+}
+message TransformerBuild {
+  string id = 1;
+  string namespace = 2;
+  string transformer = 3;                   // the transformer's name (once known)
+  // queued, building, verifying, ready, build_failed, verification_failed, cancelled
+  string status = 4;
+  string status_detail = 5;
+  string bundle_sha256 = 6;
+  string python_version = 7;
+  bool validate_only = 8;
+  string lockfile = 9;                      // the exact packages installed
+  int64 environment_bytes = 10;
+  string manifest_json = 11;                // every transformer the project declares
+  // The verification report: stages (load, static, replay, comparison, fixtures), each with
+  // its outcome, failing events and tracebacks, output checks and resources.
+  string report_json = 12;
+  string log = 13;                          // GetTransformerBuild only
+  int64 created_at_ns = 14;
+  int64 started_at_ns = 15;
+  int64 finished_at_ns = 16;
+  int32 transformer_version = 17;           // ready: the version it became
+  // What it was built and runs on besides its code and packages: the base image's digest, the
+  // harness and protocol versions, the sandbox and platform.
+  string runtime_json = 18;
+}
+message GetTransformerBuildRequest { string id = 1; }
+message ListTransformerBuildsRequest { TransformerRef transformer = 1; }   // empty: all
+message ListTransformerBuildsResponse { repeated TransformerBuild builds = 1; }
+message CancelTransformerBuildRequest { string id = 1; }
+
+message PackageIndex {
+  string name = 1;
+  string url = 2;                           // a PEP 503 "simple" index
+  repeated string credential_fields = 3;    // never the values
+  bool replaces_pypi = 4;
+  int64 created_at_ns = 5;
+  int64 updated_at_ns = 6;
+}
+message CreatePackageIndexRequest {
+  string name = 1;                          // ^[a-z][a-z0-9_-]{0,62}$
+  string url = 2;
+  bool replaces_pypi = 3;
+  // {"username": …, "password": …} or {"token": …}; empty: none.
+  string credentials_json = 4;
+}
+message ListPackageIndexesRequest {}
+message ListPackageIndexesResponse { repeated PackageIndex indexes = 1; }
+message SetPackageIndexCredentialsRequest {
+  string name = 1;
+  string credentials_json = 2;
+}
+message DeletePackageIndexRequest { string name = 1; }
+message DeletePackageIndexResponse {}
+// Performance, as last reported by the worker (rolling, since the transformer or run started).
+message TransformerStats {
+  double latency_p50_ms = 1;                // a trigger event's receive time → its outputs accepted
+  double latency_p95_ms = 2;
+  double latency_max_ms = 3;
+  double delivery_p50_ms = 4;               // receive time → the worker has the event
+  double python_ms_per_event = 5;           // the code's own time (dependency calls excluded)
+  double dependency_ms_per_call = 6;        // ctx.<dependency>.at / ctx.get / ctx.read
+  double send_ms_per_batch = 7;             // outputs → accepted
+  double events_per_second = 8;             // over the last report interval
+  double cpu_seconds = 9;                   // the code's process, cumulative
+  int64 memory_bytes = 10;                  // the code's process, peak resident
+  int64 batches = 11;
+  int64 dependency_calls = 12;
+  string last_error = 13;
+  int64 lag_ms = 14;                        // now − the latest trigger event's receive time processed
+  int64 state_versions = 15;                // dependency versions held in memory
+  int64 state_bytes = 16;                   // their approximate size
+  int64 syncs = 17;                         // SyncFeed calls (a dependency idle at a trigger)
+  double sync_ms_mean = 18;                 // waiting for dependencies to be complete, per wait
+  int64 worker_memory_bytes = 19;           // the worker process (shared by its transformers)
+  double run_seconds = 20;                  // runs: wall time so far
+  int64 code_state_bytes = 21;              // ctx.state, serialised, at the last save
+  int64 backfill_remaining = 22;            // trigger events still to replay before going live
+  // Events that arrived while it was not running (a restart, a deploy), processed when it came
+  // back: kept out of the latencies above, which are steady state only.
+  int64 catch_up_events = 23;
+  double catch_up_max_ms = 24;              // the longest such wait, receive → outputs accepted
+  // Outputs of a verified backfill still being published: until 0 (and backfill_remaining 0),
+  // the output feed's history is incomplete, and a transformer reading it would miss some.
+  int64 history_unpublished = 25;
+  double queued_p50_ms = 26;                // at the worker → its batch went to the code
+  // Per batch: the round trip to the code's process beyond the code's own time (pipes, the
+  // harness's encoding, the sandbox's wake-ups), and the runner's own work (the events to the
+  // code's format, its rows to output events).
+  double harness_ms_per_batch = 27;
+  double worker_ms_per_batch = 28;
+}
+message Transformer {
+  string id = 1;
+  string namespace = 2;
+  string name = 3;
+  int32 version = 4;
+  repeated TransformerInput triggers = 5;
+  repeated TransformerInput dependencies = 6;
+  TransformerOutput output = 7;
+  string entrypoint = 8;
+  string code_sha256 = 9;
+  bool paused = 10;
+  string status = 11;                       // pending, running, failing, paused
+  string status_detail = 12;
+  string worker = 13;
+  int64 last_heartbeat_at_ns = 14;
+  int64 last_event_at_ns = 15;
+  int64 events_in = 16;
+  int64 events_out = 17;
+  int64 errors = 18;
+  TransformerStats stats = 19;
+  int64 created_at_ns = 20;
+  int64 updated_at_ns = 21;
+  string service_account = 22;
+  string code = 23;                         // GetTransformer only
+  string on_restart = 24;
+  AsOfBasis as_of_basis = 25;
+  string python_version = 26;
+  string bundle_sha256 = 27;                // empty: inline code
+  string manifest_json = 28;                // this transformer's declaration, as extracted
+  TransformerBuild build = 29;              // the latest build (pending or finished), no log
+  bool stateful = 30;                       // keeps ctx.state (see DeployTransformerRequest)
+}
+message ListTransformersRequest {}
+message ListTransformersResponse { repeated Transformer transformers = 1; }
+message GetTransformerRequest { TransformerRef transformer = 1; }
+message PauseTransformerRequest { TransformerRef transformer = 1; }
+message ResumeTransformerRequest { TransformerRef transformer = 1; }
+message DeleteTransformerRequest { TransformerRef transformer = 1; }
+message DeleteTransformerResponse {}
+message UpdateTransformerRequest {
+  TransformerRef transformer = 1;
+  // Empty: unchanged (and, as nothing else can change yet, INVALID_ARGUMENT). Validated as a
+  // deploy's name: ^[a-z][a-z0-9_-]{0,49}$.
+  string new_name = 2;
+}
+
+message StartTransformerRunRequest {
+  TransformerRef transformer = 1;
+  int64 start_ns = 2;                       // trigger events' event time, inclusive
+  int64 end_ns = 3;                         // exclusive
+  // The feed it writes, in the transformer's namespace: a new feed (a backtest), or, if it
+  // exists, its next version. Empty: "<transformer>_run".
+  string into = 4;
+}
+message TransformerRun {
+  string id = 1;
+  string transformer = 2;
+  int32 version = 3;                        // the transformer version it runs
+  int64 start_ns = 4;
+  int64 end_ns = 5;
+  FeedRef output = 6;
+  string status = 7;                        // pending, running, done, failed, cancelled
+  string status_detail = 8;
+  double progress = 9;                      // 0–1, by event time
+  int64 events_in = 10;
+  int64 events_out = 11;
+  int64 errors = 12;
+  TransformerStats stats = 13;
+  int64 created_at_ns = 14;
+  int64 finished_at_ns = 15;
+}
+message ListTransformerRunsRequest { TransformerRef transformer = 1; }
+message ListTransformerRunsResponse { repeated TransformerRun runs = 1; }
+message GetTransformerRunRequest { string id = 1; }
+message CancelTransformerRunRequest { string id = 1; }
+
+// ---------- The pipeline ----------
+
+message GetPipelineRequest {
+  // Empty: the whole organization. Otherwise the nodes in this namespace, plus the nodes one
+  // edge away from them elsewhere (inputs from other namespaces and organizations, transformers
+  // elsewhere reading its feeds), marked `boundary`.
+  string namespace = 1;
+}
+message Pipeline {
+  repeated PipelineNode nodes = 1;    // connections, feeds, transformers, then external feeds
+  repeated PipelineEdge edges = 2;
+  int64 generated_at_ns = 3;
+}
+message PipelineNode {
+  // "connection:<name>", "feed:<namespace>/<name>@<version>", "transformer:<namespace>/<name>",
+  // or "feed:<organization>/<namespace>/<name>@<version>" for another organization's feed.
+  string id = 1;
+  oneof kind {
+    Connection connection = 2;
+    Feed feed = 3;                    // with stats, without columns
+    Transformer transformer = 4;      // without code
+    FeedRef external_feed = 5;        // another organization's public feed: no health or figures
+  }
+  Health health = 6;
+  NodeFigures figures = 7;
+  bool boundary = 8;                  // outside the namespace asked for
+}
+enum EdgeKind {
+  EDGE_KIND_UNSPECIFIED = 0;
+  EDGE_KIND_WRITES = 1;               // connection → feed, transformer → its output feed
+  EDGE_KIND_TRIGGERS = 2;             // feed → a transformer it triggers
+  EDGE_KIND_DEPENDS_ON = 3;           // feed → a transformer reading it as of each trigger
+}
+message PipelineEdge {
+  string from = 1;                    // node ids
+  string to = 2;
+  EdgeKind kind = 3;
+}
+enum HealthState {
+  HEALTH_STATE_UNSPECIFIED = 0;       // not judged (external feeds)
+  HEALTH_STATE_HEALTHY = 1;
+  HEALTH_STATE_DEGRADED = 2;          // working, but something needs a look
+  HEALTH_STATE_FAILING = 3;
+  HEALTH_STATE_STALE = 4;             // no heartbeat, or nothing arriving when something should
+  HEALTH_STATE_PAUSED = 5;
+  HEALTH_STATE_PENDING = 6;           // waiting for a worker
+}
+message Health {
+  HealthState state = 1;
+  string reason = 2;                  // for people: "no heartbeat for 3m", "p95 latency 12s"
+}
+// What latency, lag and throughput mean depends on the kind:
+// - connection: latency is the source's delay (receive − publication time of its feeds' newest
+//   events, one value per feed), lag is now − its last event sent, throughput its feeds' ingest;
+// - feed: latency is the flush lag (received → durable in files; p50 = p95), lag is now − the
+//   last receive, throughput events ingested;
+// - transformer: latency is a trigger's receive → its outputs accepted, lag is its own `lag_ms`,
+//   throughput its trigger feeds' events (each invokes it).
+// last_activity_ns: a connection's last event sent, a feed's last receive, a transformer's
+// last event.
+message NodeFigures {
+  double events_per_minute = 1;       // over the last 15 whole minutes
+  repeated double events_per_minute_series = 2;  // the last 60 whole minutes, oldest first
+  int64 latency_p50_ms = 3;
+  int64 latency_p95_ms = 4;
+  int64 lag_ms = 5;                   // 0: nothing yet
+  int64 last_activity_ns = 6;         // 0: never
+  int64 errors_last_hour = 7;         // feeds: rejections; connections: their feeds'; transformers: 0 (see Transformer.errors)
+  // All time, for a quiet node whose rate is 0 ("22,538 events, last received 18m ago", with
+  // last_activity_ns): feeds, the events stored (flushed + pending flush); connections, the
+  // events they sent; transformers, the events they wrote.
+  int64 events_total = 8;
+}
+
+message WatchPipelineRequest {
+  string namespace = 1;               // as GetPipelineRequest.namespace
+  repeated string nodes = 2;          // empty: every node; else only these ids (a detail page)
+}
+message PipelineUpdate {
+  oneof update {
+    Pipeline snapshot = 1;            // first, and again after the graph's shape changes
+    NodesChanged nodes = 2;           // the nodes that changed since the last message
+    PipelineEvent event = 3;          // something happened (toasts, activity)
+    Heartbeat heartbeat = 4;          // after ISODROME_WATCH_HEARTBEAT_INTERVAL with nothing else
+  }
+}
+// Each node in full: replace it, don't merge. A node's lag growing with the clock alone doesn't
+// count as a change (derive the running figure from `last_activity_ns`).
+message NodesChanged {
+  repeated PipelineNode nodes = 1;
+  int64 generated_at_ns = 2;
+}
+message PipelineEvent {
+  int64 at_ns = 1;
+  string node = 2;                    // a node id, "secret:<name>" or "build:<id>"
+  // "created", "deleted", "paused", "resumed", "restarted", "build_started", "build_finished",
+  // "build_failed", "secret_updated", "health_changed", "moved" (detail: "from <old node id>")
+  string kind = 3;
+  string detail = 4;
 }
